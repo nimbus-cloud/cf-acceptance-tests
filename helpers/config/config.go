@@ -36,8 +36,11 @@ type CatsConfig interface {
 	GetIncludeNimbusServicePostgres() bool
 	GetNimbusServiceNamePostgres() string
 	GetIncludeNimbusServiceRabbit() bool
+	GetNimbusServiceNamel2Rabbit() string
 	GetNimbusServiceNameRabbit() string
+	GetNimbusServiceNamel2Rabbit() string
 	GetNimbusServicePlanRabbit() string
+	GetNimbusServicePlanl2Rabbit() string
 	GetIncludeNimbusServiceRedis() bool
 	GetNimbusServiceNameRedis() string
 	GetIncludeNimbusServiceSCMSMongo() bool
