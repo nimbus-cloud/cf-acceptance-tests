@@ -80,7 +80,9 @@ type config struct {
 
 	NimbusServiceNameInternalProxy *string `json:"nimbus_service_name_internal_proxy"`
 	NimbusServiceNamePostgres      *string `json:"nimbus_service_name_postgres"`
+	NimbusServiceNamel2Rabbit      *string `json:"nimbus_service_name_l2rabbit"`
 	NimbusServiceNameRabbit        *string `json:"nimbus_service_name_rabbit"`
+	NimbusServicePlanl2Rabbit      *string `json:"nimbus_service_plan_l2rabbit"`
 	NimbusServicePlanRabbit        *string `json:"nimbus_service_plan_rabbit"`
 	NimbusServiceNameRedis         *string `json:"nimbus_service_name_redis"`
 	NimbusServiceNameSCMSMongo     *string `json:"nimbus_service_name_scms_mongo"`
@@ -835,7 +837,7 @@ func (c *config) GetNimbusServiceNameRabbit() string {
 }
 
 func (c *config) GetNimbusServicePlanl2Rabbit() string {
-	return *c.NimbusServicePlanRabbit
+	return *c.NimbusServicePlanl2Rabbit
 }
 
 func (c *config) GetNimbusServicePlanRabbit() string {
