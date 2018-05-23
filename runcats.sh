@@ -2,15 +2,17 @@
 set -xeu
 
 
-CF_GOPATH=$HOME/go/src/github.com/cloudfoundry/
+# CF_GOPATH=$HOME/go/src/github.com/cloudfoundry/
 
-echo "Setting integration config..."
-export CONFIG="/Users/amu36/Documents/git/cats-integration-config/m25-test-01.json"
+# echo "Setting integration config..."
+export CONFIG="$HOME/Documents/git/cats-integration-config/m25-test-01.json"
 
-echo "Moving cf-acceptance-tests onto the gopath..."
-mkdir -p $CF_GOPATH
-cp -R ../cf-acceptance-tests $CF_GOPATH
-cd $HOME/go/src/github.com/cloudfoundry/cf-acceptance-tests
+# echo "Moving cf-acceptance-tests onto the gopath..."
+# mkdir -p $CF_GOPATH
+# cp -R ../cf-acceptance-tests $CF_GOPATH
+# cd $HOME/go/src/github.com/cloudfoundry/cf-acceptance-tests
+
+export GOPATH="$HOME/go"
 
 export CF_DIAL_TIMEOUT=11
 
@@ -20,3 +22,4 @@ export CF_DIAL_TIMEOUT=11
 -skipPackage=helpers \
 -slowSpecThreshold=120 \
 -nodes=3 \
+
