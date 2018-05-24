@@ -19,16 +19,16 @@ var _ = NimbusDescribe("rabbitmq service federation", func() {
 
 	BeforeEach(func() {
 
-		if Config.GetIncludeNimbusServiceRabbit() != true {
-			Skip("include_nimbus_service_rabbit was not set to true")
+		if Config.GetIncludeNimbusServicel2Rabbit() != true {
+			Skip("include_nimbus_service_l2rabbit was not set to true")
 		}
 
 		appName = random_name.CATSRandomName("APP")
 		postgresName = random_name.CATSRandomName("SVC")
 		rabbitName = random_name.CATSRandomName("SVC")
 
-		Expect(cf.Cf("create-service", Config.GetNimbusServiceNamePostgres(), "standard", postgresName).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-		Expect(cf.Cf("create-service", Config.GetNimbusServiceNameRabbit(), Config.GetNimbusServicePlanRabbit(), rabbitName).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+		Expect(cf.Cf("create-service", Config.GetNimbusServiceNamePostgres(), "default", postgresName).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+		Expect(cf.Cf("create-service", Config.GetNimbusServiceNamel2Rabbit(), Config.GetNimbusServicePlanl2Rabbit(), rabbitName).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
 
 		Expect(cf.Cf("push", appName, "-p", assets.NewAssets().NimbusServices, "--no-start", "-i", "2").Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 		Expect(cf.Cf("bind-service", appName, postgresName).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
