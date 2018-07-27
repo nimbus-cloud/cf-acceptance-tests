@@ -46,7 +46,7 @@ module Nimbus
   class Config
     class << self
 
-      def lrabbit
+      def l2_rabbit
         rabbit_entry = vcap_services.select { |key, _| key.include? 'l2-rabbitmq' }.values[0][0]
         rabbit_entry['credentials']['uri']
       rescue
