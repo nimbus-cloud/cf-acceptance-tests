@@ -46,11 +46,11 @@ var _ = NimbusDescribe("Netflix-Redis service", func() {
 		randomValue := random_name.CATSRandomName("VAL")
 
 		Eventually(func() string {
-			return helpers.CurlApp(Config, appName, "/redis/insert/"+randomKey+"/"+randomValue)
+			return helpers.CurlApp(Config, appName, "/netflixredis/insert/"+randomKey+"/"+randomValue)
 		}, Config.DefaultTimeoutDuration()).Should(ContainSubstring("OK"))
 
 		Eventually(func() string {
-			return helpers.CurlApp(Config, appName, "/redis/read/"+randomKey+"/"+randomValue)
+			return helpers.CurlApp(Config, appName, "/netflixredis/read/"+randomKey+"/"+randomValue)
 		}, Config.DefaultTimeoutDuration()).Should(ContainSubstring("OK"))
 
 	})
