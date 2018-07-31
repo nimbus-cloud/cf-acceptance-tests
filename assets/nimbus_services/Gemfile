@@ -15,5 +15,4 @@ gem 'dalli'
 gem 'vault'
 gem 'cassandra-driver'
 gem 'cassandra'
-gem 'zookeeper'
 
