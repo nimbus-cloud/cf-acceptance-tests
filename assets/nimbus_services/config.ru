@@ -8,9 +8,9 @@ require_relative 'proxy'    if Nimbus::Config.proxy
 require_relative 'internalproxy'    if Nimbus::Config.internalproxy
 require_relative 'sharedfs' if Nimbus::Config.sharedfs
 require_relative 'redis'    if Nimbus::Config.redis
+require_relative 'netflixredis'    if Nimbus::Config.netflixredis
 require_relative 'memcache' if Nimbus::Config.memcache
 require_relative 'vault'    if Nimbus::Config.vault
 require_relative 'cassandra'    if Nimbus::Config.cassandra
 
 run Nimbus::ServicesApp
-

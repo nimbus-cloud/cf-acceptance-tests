@@ -69,6 +69,7 @@ type config struct {
 	IncludeNimbusServicel2Rabbit      *bool `json:"include_nimbus_service_l2rabbit"`
 	IncludeNimbusServiceRabbit        *bool `json:"include_nimbus_service_rabbit"`
 	IncludeNimbusServiceRedis         *bool `json:"include_nimbus_service_redis"`
+	IncludeNimbusServiceNetflixRedis  *bool `json:"include_nimbus_service_netflix_redis"`
 	IncludeNimbusServiceSCMSMongo     *bool `json:"include_nimbus_service_scms_mongo"`
 	IncludeNimbusServiceCassandra     *bool `json:"include_nimbus_service_cassandra"`
 	IncludeNimbusServiceMySQL         *bool `json:"include_nimbus_service_mysql"`
@@ -85,6 +86,7 @@ type config struct {
 	NimbusServicePlanl2Rabbit      *string `json:"nimbus_service_plan_l2rabbit"`
 	NimbusServicePlanRabbit        *string `json:"nimbus_service_plan_rabbit"`
 	NimbusServiceNameRedis         *string `json:"nimbus_service_name_redis"`
+	NimbusServiceNameNetflixRedis  *string `json:"nimbus_service_name_netflix_redis"`
 	NimbusServiceNameSCMSMongo     *string `json:"nimbus_service_name_scms_mongo"`
 	NimbusServiceNameCassandra     *string `json:"nimbus_service_name_cassandra"`
 	NimbusServicePlanCassandra     *string `json:"nimbus_service_plan_cassandra"`
@@ -233,6 +235,7 @@ func getDefaults() config {
 	defaults.NimbusServicePlanl2Rabbit = ptrToString("default")
 	defaults.NimbusServicePlanRabbit = ptrToString("standard")
 	defaults.NimbusServiceNameRedis = ptrToString("redis")
+	defaults.NimbusServiceNameNetflixRedis = ptrToString("netflix-redis")
 	defaults.NimbusServiceNameSCMSMongo = ptrToString("scms-mongo3")
 	defaults.NimbusServiceNameCassandra = ptrToString("cassandra")
 	defaults.NimbusServicePlanCassandra = ptrToString("default")
@@ -848,8 +851,16 @@ func (c *config) GetIncludeNimbusServiceRedis() bool {
 	return *c.IncludeNimbusServiceRedis
 }
 
+func (c *config) GetIncludeNimbusServiceNetflixRedis() bool {
+	return *c.IncludeNimbusServiceNetflixRedis
+}
+
 func (c *config) GetNimbusServiceNameRedis() string {
 	return *c.NimbusServiceNameRedis
+}
+
+func (c *config) GetNimbusServiceNameNetflixRedis() string {
+	return *c.NimbusServiceNameNetflixRedis
 }
 
 func (c *config) GetIncludeNimbusServiceSCMSMongo() bool {
