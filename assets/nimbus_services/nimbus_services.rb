@@ -61,6 +61,14 @@ module Nimbus
         nil
       end
 
+      def netflixredis
+        netflixredis_entry = vcap_services.select { |key, _| key.include? 'netflix-redis' }.values[0][0]
+        credentials = netflixredis_entry['credentials']
+        "redis://#{credentials['name']}:#{credentials['password']}@#{credentials['host']}:#{credentials['port']}/0/nimbus:store"
+      rescue
+        nil
+      end
+
       def memcache
         memcache_entry = vcap_services.select { |key, _| key.include? 'memcache' }.values[0][0]
         memcache_entry['credentials']

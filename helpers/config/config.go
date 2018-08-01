@@ -41,7 +41,9 @@ type CatsConfig interface {
 	GetNimbusServiceNameRabbit() string
 	GetNimbusServicePlanl2Rabbit() string
 	GetNimbusServicePlanRabbit() string
+	GetIncludeNimbusServiceNetflixRedis() bool
 	GetIncludeNimbusServiceRedis() bool
+	GetNimbusServiceNameNetflixRedis() string
 	GetNimbusServiceNameRedis() string
 	GetIncludeNimbusServiceSCMSMongo() bool
 	GetNimbusServiceNameSCMSMongo() string
