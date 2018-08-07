@@ -55,7 +55,7 @@ module Nimbus
 
       def rabbit
         rabbit_entry = vcap_services.select { |key, _| key.include? 'rabbit' }.values[0][0]
-        rabbit_entry['credentials']['uri']
+        rabbit_entry['credentials']['uris']
       rescue
         nil
       end
