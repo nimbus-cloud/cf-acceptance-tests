@@ -1,5 +1,6 @@
 require_relative 'nimbus_services'
 
+require_relative 'l2rabbit'    if Nimbus::Config.l2rabbit
 require_relative 'rabbit'   if Nimbus::Config.rabbit
 require_relative 'mysql'    if Nimbus::Config.mysql
 require_relative 'mongo'    if Nimbus::Config.mongo

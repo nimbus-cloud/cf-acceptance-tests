@@ -15,24 +15,24 @@ import (
 
 var _ = NimbusDescribe("rabbitmq service federation", func() {
 
-	var appName, postgresName, rabbitName string
+	var appName, postgresName, l2rabbitName string
 
 	BeforeEach(func() {
 
-		if Config.GetIncludeNimbusServiceRabbit() != true {
-			Skip("include_nimbus_service_rabbit was not set to true")
+		if Config.GetIncludeNimbusServicel2Rabbit() != true {
+			Skip("include_nimbus_service_l2rabbit was not set to true")
 		}
 
 		appName = random_name.CATSRandomName("APP")
 		postgresName = random_name.CATSRandomName("SVC")
-		rabbitName = random_name.CATSRandomName("SVC")
+		l2rabbitName = random_name.CATSRandomName("SVC")
 
-		Expect(cf.Cf("create-service", Config.GetNimbusServiceNamePostgres(), "standard", postgresName).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-		Expect(cf.Cf("create-service", Config.GetNimbusServiceNameRabbit(), Config.GetNimbusServicePlanRabbit(), rabbitName).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+		Expect(cf.Cf("create-service", Config.GetNimbusServiceNamePostgres(), "default", postgresName).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+		Expect(cf.Cf("create-service", Config.GetNimbusServiceNamel2Rabbit(), Config.GetNimbusServicePlanl2Rabbit(), l2rabbitName).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
 
 		Expect(cf.Cf("push", appName, "-p", assets.NewAssets().NimbusServices, "--no-start", "-i", "2").Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 		Expect(cf.Cf("bind-service", appName, postgresName).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-		Expect(cf.Cf("bind-service", appName, rabbitName).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+		Expect(cf.Cf("bind-service", appName, l2rabbitName).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
 
 		app_helpers.SetBackend(appName)
 		Expect(cf.Cf("start", appName).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
@@ -41,13 +41,13 @@ var _ = NimbusDescribe("rabbitmq service federation", func() {
 	AfterEach(func() {
 		Expect(cf.Cf("delete", appName, "-f").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
 		Expect(cf.Cf("delete-service", postgresName).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-		Expect(cf.Cf("delete-service", rabbitName, "-f").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+		Expect(cf.Cf("delete-service", l2rabbitName, "-f").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
 	})
 
 	It("app instances in both data centres receive messages", func() {
 		Eventually(func() string {
-			helpers.CurlApp(Config, appName, "/rabbit/publish")
-			return helpers.CurlApp(Config, appName, "/rabbit/check/2")
+			helpers.CurlApp(Config, appName, "/l2rabbit/publish")
+			return helpers.CurlApp(Config, appName, "/l2rabbit/check/2")
 		}, Config.DefaultTimeoutDuration()).Should(ContainSubstring("OK"))
 	})
 
