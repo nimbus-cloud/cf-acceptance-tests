@@ -14,3 +14,4 @@ require_relative 'vault'    if Nimbus::Config.vault
 require_relative 'cassandra'    if Nimbus::Config.cassandra
 
 run Nimbus::ServicesApp
+
