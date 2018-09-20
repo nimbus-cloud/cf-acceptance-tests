@@ -46,13 +46,6 @@ module Nimbus
   class Config
     class << self
 
-      def l2rabbit
-        l2rabbit_entry = vcap_services.select { |key, _| key.include? 'l2-rabbit' }.values[0][0]
-        l2rabbit_entry['credentials']['uri']
-      rescue
-        nil
-      end
-
       def rabbit
         rabbit_entry = vcap_services.select { |key, _| key.include? 'rabbit' }.values[0][0]
         rabbit_entry['credentials']['uris']
@@ -63,14 +56,6 @@ module Nimbus
       def redis
         redis_entry = vcap_services.select { |key, _| key.include? 'redis' }.values[0][0]
         credentials = redis_entry['credentials']
-        "redis://#{credentials['name']}:#{credentials['password']}@#{credentials['host']}:#{credentials['port']}/0/nimbus:store"
-      rescue
-        nil
-      end
-
-      def netflixredis
-        netflixredis_entry = vcap_services.select { |key, _| key.include? 'netflix-redis' }.values[0][0]
-        credentials = netflixredis_entry['credentials']
         "redis://#{credentials['name']}:#{credentials['password']}@#{credentials['host']}:#{credentials['port']}/0/nimbus:store"
       rescue
         nil
