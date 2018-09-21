@@ -47,7 +47,7 @@ var _ = NimbusDescribe("rabbitmq service federation", func() {
 	It("app instances in both data centres receive messages", func() {
 		Eventually(func() string {
 			helpers.CurlApp(Config, appName, "/rabbit/publish")
-			return helpers.CurlApp(Config, appName, "/rabbit/check/1")
+			return helpers.CurlApp(Config, appName, "/rabbit/check/2")
 		}, Config.DefaultTimeoutDuration()).Should(ContainSubstring("OK"))
 	})
 
