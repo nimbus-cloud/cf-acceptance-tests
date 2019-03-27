@@ -10,7 +10,7 @@ module Nimbus
     configure do
       set :database, adapter: 'mysql2',
                      database: Nimbus::Config.mysql['name'],
-                     host: Nimbus::Config.mysql['host'],
+                     host: Nimbus::Config.mysql['hostname'],
                      port: Nimbus::Config.mysql['port'],
                      username: Nimbus::Config.mysql['username'],
                      password: Nimbus::Config.mysql['password']
