@@ -41,14 +41,14 @@ var _ = AppsDescribe("Admin Buildpacks", func() {
 	}
 
 	AfterEach(func() {
-		app_helpers.AppReport(appName, Config.DefaultTimeoutDuration())
+		app_helpers.AppReport(appName)
 		for _, name := range buildpackNames {
 			workflowhelpers.AsUser(TestSetup.AdminUserContext(), Config.DefaultTimeoutDuration(), func() {
-				Expect(cf.Cf("delete-buildpack", name, "-f").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+				Expect(cf.Cf("delete-buildpack", name, "-f").Wait()).To(Exit(0))
 			})
 		}
 		for _, name := range appNames {
-			command := cf.Cf("delete", name, "-f", "-r").Wait(Config.DefaultTimeoutDuration())
+			command := cf.Cf("delete", name, "-f", "-r").Wait()
 			Expect(command).To(Exit(0))
 			Expect(command).To(Say(fmt.Sprintf("Deleting app %s", name)))
 		}
@@ -108,7 +108,7 @@ config_vars:
   PATH: bin:/usr/local/bin:/usr/bin:/bin
   FROM_BUILD_PACK: "yes"
 default_process_types:
-  web: while true; do { echo -e 'HTTP/1.1 200 OK\r\n'; echo "hi from a simple admin buildpack"; } | nc -l \$PORT; done
+  web: while true; do { echo -e 'HTTP/1.1 200 OK\r\n'; echo "hi from a simple admin buildpack"; } | nc -q 1 -l \$PORT; done
 EOF
 `,
 				},
@@ -122,7 +122,7 @@ EOF
 			_, err = os.Create(path.Join(appPath, "some-file"))
 			Expect(err).ToNot(HaveOccurred())
 
-			createBuildpack := cf.Cf("create-buildpack", buildpackName, buildpackArchivePath, "0").Wait(Config.DefaultTimeoutDuration())
+			createBuildpack := cf.Cf("create-buildpack", buildpackName, buildpackArchivePath, "0").Wait()
 			Expect(createBuildpack).Should(Exit(0))
 			Expect(createBuildpack).Should(Say("Creating"))
 			Expect(createBuildpack).Should(Say("OK"))
@@ -161,7 +161,12 @@ exit 1
 					Name: "bin/detect",
 					Body: fmt.Sprintf(`#!/bin/bash
 
-echo Simple
+if [ -f "${1}/%s" ]; then
+  echo Simple
+else
+  echo no
+  exit 1
+fi
 `, matchingFilename(appName)),
 				},
 				{
@@ -188,7 +193,7 @@ EOF
 			_, err = os.Create(path.Join(appPath, "some-file"))
 			Expect(err).ToNot(HaveOccurred())
 
-			createBuildpack := cf.Cf("create-buildpack", buildpackName, buildpackArchivePath, "0").Wait(Config.DefaultTimeoutDuration())
+			createBuildpack := cf.Cf("create-buildpack", buildpackName, buildpackArchivePath, "0").Wait()
 			Expect(createBuildpack).Should(Exit(0))
 			Expect(createBuildpack).Should(Say("Creating"))
 			Expect(createBuildpack).Should(Say("OK"))
@@ -227,7 +232,12 @@ echo Pass compile
 					Name: "bin/detect",
 					Body: fmt.Sprintf(`#!/bin/bash
 
-echo Pass Detect
+if [ -f "${1}/%s" ]; then
+  echo Pass Detect
+else
+  echo no
+  exit 1
+fi
 `, matchingFilename(appName)),
 				},
 				{
@@ -247,7 +257,7 @@ exit 1
 			_, err = os.Create(path.Join(appPath, "some-file"))
 			Expect(err).ToNot(HaveOccurred())
 
-			createBuildpack := cf.Cf("create-buildpack", buildpackName, buildpackArchivePath, "0").Wait(Config.DefaultTimeoutDuration())
+			createBuildpack := cf.Cf("create-buildpack", buildpackName, buildpackArchivePath, "0").Wait()
 			Expect(createBuildpack).Should(Exit(0))
 			Expect(createBuildpack).Should(Say("Creating"))
 			Expect(createBuildpack).Should(Say("OK"))
@@ -257,71 +267,54 @@ exit 1
 	}
 
 	itIsUsedForTheApp := func() {
-		Expect(cf.Cf("push", appName, "--no-start", "-m", DEFAULT_MEMORY_LIMIT, "-p", appPath, "-d", Config.GetAppsDomain()).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-		app_helpers.SetBackend(appName)
+		push := cf.Cf("push", appName, "-m", DEFAULT_MEMORY_LIMIT, "-p", appPath, "-d", Config.GetAppsDomain()).Wait(Config.CfPushTimeoutDuration())
 
-		start := cf.Cf("start", appName).Wait(Config.CfPushTimeoutDuration())
-		Expect(start).To(Exit(0))
-		appOutput := cf.Cf("app", appName).Wait(Config.DefaultTimeoutDuration())
-		Expect(appOutput).To(Say("buildpack:\\s+Simple"))
+		Expect(push).To(Exit(0))
+		appOutput := cf.Cf("app", appName).Wait()
+		Expect(appOutput).To(Say("buildpacks?:\\s+Simple"))
 	}
 
 	itDoesNotDetectForEmptyApp := func() {
-		Expect(cf.Cf("push", appName, "--no-start", "-m", DEFAULT_MEMORY_LIMIT, "-p", appPath, "-d", Config.GetAppsDomain()).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-		app_helpers.SetBackend(appName)
+		push := cf.Cf("push", appName, "-m", DEFAULT_MEMORY_LIMIT, "-p", appPath, "-d", Config.GetAppsDomain()).Wait(Config.CfPushTimeoutDuration())
 
-		start := cf.Cf("start", appName).Wait(Config.CfPushTimeoutDuration())
-		Expect(start).To(Exit(1))
-		Expect(combineOutput(start.Out, start.Err)).To(Say(noAppDetectedErrorRegexp))
+		Expect(push).To(Exit(1))
+		Expect(combineOutput(push.Out, push.Err)).To(Say(noAppDetectedErrorRegexp))
 	}
 
 	itDoesNotDetectWhenBuildpackDisabled := func() {
 		workflowhelpers.AsUser(TestSetup.AdminUserContext(), Config.DefaultTimeoutDuration(), func() {
-			Expect(cf.Cf("update-buildpack", buildpackName, "--disable").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+			Expect(cf.Cf("update-buildpack", buildpackName, "--disable").Wait()).To(Exit(0))
 		})
 
-		Expect(cf.Cf("push", appName, "--no-start", "-m", DEFAULT_MEMORY_LIMIT, "-p", appPath, "-d", Config.GetAppsDomain()).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-		app_helpers.SetBackend(appName)
-
-		start := cf.Cf("start", appName).Wait(Config.CfPushTimeoutDuration())
-		Expect(start).To(Exit(1))
-		Expect(combineOutput(start.Out, start.Err)).To(Say(noAppDetectedErrorRegexp))
+		push := cf.Cf("push", appName, "-m", DEFAULT_MEMORY_LIMIT, "-p", appPath, "-d", Config.GetAppsDomain()).Wait(Config.CfPushTimeoutDuration())
+		Expect(push).To(Exit(1))
+		Expect(combineOutput(push.Out, push.Err)).To(Say(noAppDetectedErrorRegexp))
 	}
 
 	itDoesNotDetectWhenBuildpackDeleted := func() {
 		workflowhelpers.AsUser(TestSetup.AdminUserContext(), Config.DefaultTimeoutDuration(), func() {
-			Expect(cf.Cf("delete-buildpack", buildpackName, "-f").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+			Expect(cf.Cf("delete-buildpack", buildpackName, "-f").Wait()).To(Exit(0))
 		})
-		Expect(cf.Cf("push", appName, "--no-start", "-m", DEFAULT_MEMORY_LIMIT, "-p", appPath, "-d", Config.GetAppsDomain()).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-		app_helpers.SetBackend(appName)
-
-		start := cf.Cf("start", appName).Wait(Config.CfPushTimeoutDuration())
-		Expect(start).To(Exit(1))
-		Expect(combineOutput(start.Out, start.Err)).To(Say(noAppDetectedErrorRegexp))
+		push := cf.Cf("push", appName, "-m", DEFAULT_MEMORY_LIMIT, "-p", appPath, "-d", Config.GetAppsDomain()).Wait(Config.CfPushTimeoutDuration())
+		Expect(push).To(Exit(1))
+		Expect(combineOutput(push.Out, push.Err)).To(Say(noAppDetectedErrorRegexp))
 	}
 
 	itRaisesBuildpackCompileFailedError := func() {
-		Expect(cf.Cf("push",
+		push := cf.Cf("push",
 			appName,
-			"--no-start",
 			"-b", buildpackName,
 			"-m", DEFAULT_MEMORY_LIMIT,
 			"-p", appPath,
-			"-d", Config.GetAppsDomain()).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
-		app_helpers.SetBackend(appName)
-
-		start := cf.Cf("start", appName).Wait(Config.CfPushTimeoutDuration())
-		Expect(start).To(Exit(1))
-		Expect(combineOutput(start.Out, start.Err)).To(Say(buildpackCompileFailedRegexp))
+			"-d", Config.GetAppsDomain()).Wait(Config.CfPushTimeoutDuration())
+		Expect(push).To(Exit(1))
+		Expect(combineOutput(push.Out, push.Err)).To(Say(buildpackCompileFailedRegexp))
 	}
 
 	itRaisesBuildpackReleaseFailedError := func() {
-		Expect(cf.Cf("push", appName, "--no-start", "-b", buildpackName, "-m", DEFAULT_MEMORY_LIMIT, "-p", appPath, "-d", Config.GetAppsDomain()).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-		app_helpers.SetBackend(appName)
-
-		start := cf.Cf("start", appName).Wait(Config.CfPushTimeoutDuration())
-		Expect(start).To(Exit(1))
-		Expect(combineOutput(start.Out, start.Err)).To(Say(buildpackReleaseFailedRegexp))
+		push := cf.Cf("push", appName, "-b", buildpackName, "-m", DEFAULT_MEMORY_LIMIT, "-p", appPath, "-d", Config.GetAppsDomain()).Wait(Config.CfPushTimeoutDuration())
+		Expect(push).To(Exit(1))
+		Expect(combineOutput(push.Out, push.Err)).To(Say(buildpackReleaseFailedRegexp))
 	}
 
 	Context("when the buildpack is not specified", func() {
@@ -348,28 +341,20 @@ exit 1
 		It("stages the app using the specified buildpack", func() {
 			setupBadDetectBuildpack(appConfig{Empty: false})
 
-			Expect(cf.Cf("push", appName, "--no-start", "-b", buildpackName, "-m", DEFAULT_MEMORY_LIMIT, "-p", appPath, "-d", Config.GetAppsDomain()).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-			app_helpers.SetBackend(appName)
+			Expect(cf.Cf("push", appName, "-b", buildpackName, "-m", DEFAULT_MEMORY_LIMIT, "-p", appPath, "-d", Config.GetAppsDomain()).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 
-			start := cf.Cf("start", appName).Wait(Config.CfPushTimeoutDuration())
-			Expect(start).To(Exit(0))
-
-			appOutput := cf.Cf("app", appName).Wait(Config.DefaultTimeoutDuration())
-			Expect(appOutput).To(Say("buildpack:\\s+" + buildpackName))
+			appOutput := cf.Cf("app", appName).Wait()
+			Expect(appOutput).To(Say("buildpacks?:\\s+" + buildpackName))
 		})
 
 		It("fails if the specified buildpack is disabled", func() {
 			setupBadDetectBuildpack(appConfig{Empty: false})
 
 			workflowhelpers.AsUser(TestSetup.AdminUserContext(), Config.DefaultTimeoutDuration(), func() {
-				Expect(cf.Cf("update-buildpack", buildpackName, "--disable").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+				Expect(cf.Cf("update-buildpack", buildpackName, "--disable").Wait()).To(Exit(0))
 			})
 
-			Expect(cf.Cf("push", appName, "--no-start", "-b", buildpackName, "-m", DEFAULT_MEMORY_LIMIT, "-p", appPath, "-d", Config.GetAppsDomain()).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-			app_helpers.SetBackend(appName)
-
-			start := cf.Cf("start", appName).Wait(Config.CfPushTimeoutDuration())
-			Expect(start).To(Exit(1))
+			Expect(cf.Cf("push", appName, "-b", buildpackName, "-m", DEFAULT_MEMORY_LIMIT, "-p", appPath, "-d", Config.GetAppsDomain()).Wait(Config.CfPushTimeoutDuration())).To(Exit(1))
 		})
 	})
 

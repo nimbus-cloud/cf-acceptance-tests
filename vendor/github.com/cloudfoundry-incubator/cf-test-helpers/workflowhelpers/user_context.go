@@ -4,13 +4,16 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/cloudfoundry-incubator/cf-test-helpers/commandstarter"
 	"github.com/cloudfoundry-incubator/cf-test-helpers/internal"
 	workflowhelpersinternal "github.com/cloudfoundry-incubator/cf-test-helpers/workflowhelpers/internal"
+	"github.com/onsi/ginkgo"
 	ginkgoconfig "github.com/onsi/ginkgo/config"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/gbytes"
 	. "github.com/onsi/gomega/gexec"
 )
 
@@ -38,6 +41,27 @@ type UserContext struct {
 	Password string
 	Org      string
 	Space    string
+
+	UseClientCredentials bool
+}
+
+func cliErrorMessage(session *Session) string {
+	var command string
+
+	if strings.EqualFold(session.Command.Args[1], "auth") {
+		command = strings.Join(session.Command.Args[:2], " ")
+	} else {
+		command = strings.Join(session.Command.Args, " ")
+	}
+
+	return fmt.Sprintf("\n>>> [ %s ] exited with an error \n", command)
+}
+
+func apiErrorMessage(session *Session) string {
+	apiEndpoint := strings.Join(session.Command.Args, " ")
+	stdError := string(session.Err.Contents())
+
+	return fmt.Sprintf("\n>>> [ %s ] exited with an error \n\n%s\n", apiEndpoint, stdError)
 }
 
 func NewUserContext(apiUrl string, testUser userValues, testSpace spaceValues, skipSSLValidation bool, timeout time.Duration) UserContext {
@@ -66,11 +90,21 @@ func (uc UserContext) Login() {
 	if uc.SkipSSLValidation {
 		args = append(args, "--skip-ssl-validation")
 	}
-	session := internal.Cf(uc.CommandStarter, args...)
-	EventuallyWithOffset(1, session, uc.Timeout).Should(Exit(0))
 
-	session = workflowhelpersinternal.CfAuth(uc.CommandStarter, uc.TestUser.Username(), uc.TestUser.Password())
-	EventuallyWithOffset(1, session, uc.Timeout).Should(Exit(0))
+	session := internal.Cf(uc.CommandStarter, args...).Wait(uc.Timeout)
+	EventuallyWithOffset(1, session, uc.Timeout).Should(Exit(0), apiErrorMessage(session))
+
+	redactor := internal.NewRedactor(uc.TestUser.Password())
+	redactingReporter := internal.NewRedactingReporter(ginkgo.GinkgoWriter, redactor)
+
+	var err error
+	if uc.UseClientCredentials {
+		err = workflowhelpersinternal.CfClientAuth(uc.CommandStarter, redactingReporter, uc.TestUser.Username(), uc.TestUser.Password(), uc.Timeout)
+	} else {
+		err = workflowhelpersinternal.CfAuth(uc.CommandStarter, redactingReporter, uc.TestUser.Username(), uc.TestUser.Password(), uc.Timeout)
+	}
+
+	Expect(err).NotTo(HaveOccurred())
 }
 
 func (uc UserContext) SetCfHomeDir() (string, string) {
@@ -88,7 +122,7 @@ func (uc UserContext) TargetSpace() {
 	if uc.TestSpace != nil && uc.TestSpace.OrganizationName() != "" {
 		var session *Session
 		session = internal.Cf(uc.CommandStarter, "target", "-o", uc.TestSpace.OrganizationName(), "-s", uc.TestSpace.SpaceName())
-		EventuallyWithOffset(1, session, uc.Timeout).Should(Exit(0))
+		EventuallyWithOffset(1, session, uc.Timeout).Should(Exit(0), cliErrorMessage(session))
 	}
 }
 
@@ -98,18 +132,27 @@ func (uc UserContext) AddUserToSpace() {
 	spaceName := uc.TestSpace.SpaceName()
 
 	spaceManager := internal.Cf(uc.CommandStarter, "set-space-role", username, orgName, spaceName, "SpaceManager")
-	EventuallyWithOffset(1, spaceManager, uc.Timeout).Should(Exit(0))
+	EventuallyWithOffset(1, spaceManager, uc.Timeout).Should(Exit())
+	if spaceManager.ExitCode() != 0 {
+		ExpectWithOffset(1, spaceManager.Out).Should(gbytes.Say("not authorized"))
+	}
 
 	spaceDeveloper := internal.Cf(uc.CommandStarter, "set-space-role", username, orgName, spaceName, "SpaceDeveloper")
-	EventuallyWithOffset(1, spaceDeveloper, uc.Timeout).Should(Exit(0))
+	EventuallyWithOffset(1, spaceDeveloper, uc.Timeout).Should(Exit())
+	if spaceDeveloper.ExitCode() != 0 {
+		ExpectWithOffset(1, spaceDeveloper.Out).Should(gbytes.Say("not authorized"))
+	}
 
 	spaceAuditor := internal.Cf(uc.CommandStarter, "set-space-role", username, orgName, spaceName, "SpaceAuditor")
-	EventuallyWithOffset(1, spaceAuditor, uc.Timeout).Should(Exit(0))
+	EventuallyWithOffset(1, spaceAuditor, uc.Timeout).Should(Exit())
+	if spaceAuditor.ExitCode() != 0 {
+		ExpectWithOffset(1, spaceAuditor.Out).Should(gbytes.Say("not authorized"))
+	}
 }
 
 func (uc UserContext) Logout() {
 	session := internal.Cf(uc.CommandStarter, "logout")
-	EventuallyWithOffset(1, session, uc.Timeout).Should(Exit(0))
+	EventuallyWithOffset(1, session, uc.Timeout).Should(Exit(0), cliErrorMessage(session))
 }
 
 func (uc UserContext) UnsetCfHomeDir(originalCfHomeDir, currentCfHomeDir string) {

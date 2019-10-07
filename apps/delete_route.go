@@ -24,21 +24,25 @@ var _ = AppsDescribe("Delete Route", func() {
 
 		appUrl := "https://" + appName + "." + Config.GetAppsDomain()
 
-		nullSession := helpers.CurlSkipSSL(Config.GetSkipSSLValidation(), appUrl).Wait(Config.DefaultTimeoutDuration())
+		nullSession := helpers.CurlSkipSSL(Config.GetSkipSSLValidation(), appUrl).Wait()
 		expectedNullResponse = string(nullSession.Buffer().Contents())
 
-		Expect(cf.Cf("push", appName, "--no-start", "-b", Config.GetRubyBuildpackName(), "-m", DEFAULT_MEMORY_LIMIT, "-p", assets.NewAssets().Dora, "-d", Config.GetAppsDomain()).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-		app_helpers.SetBackend(appName)
-		Expect(cf.Cf("start", appName).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
+		Expect(cf.Cf("push",
+			appName,
+			"-b", Config.GetBinaryBuildpackName(),
+			"-m", DEFAULT_MEMORY_LIMIT,
+			"-p", assets.NewAssets().Catnip,
+			"-c", "./catnip",
+			"-d", Config.GetAppsDomain()).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 		Eventually(func() string {
 			return helpers.CurlAppRoot(Config, appName)
-		}, Config.DefaultTimeoutDuration()).Should(ContainSubstring("Hi, I'm Dora!"))
+		}).Should(ContainSubstring("Catnip?"))
 	})
 
 	AfterEach(func() {
-		app_helpers.AppReport(appName, Config.DefaultTimeoutDuration())
+		app_helpers.AppReport(appName)
 
-		Expect(cf.Cf("delete", appName, "-f", "-r").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+		Expect(cf.Cf("delete", appName, "-f", "-r").Wait()).To(Exit(0))
 	})
 
 	Describe("Removing the route", func() {
@@ -46,18 +50,18 @@ var _ = AppsDescribe("Delete Route", func() {
 			secondHost := random_name.CATSRandomName("ROUTE")
 
 			By("adding a route")
-			Eventually(cf.Cf("map-route", appName, Config.GetAppsDomain(), "-n", secondHost), Config.DefaultTimeoutDuration()).Should(Exit(0))
-			Eventually(helpers.CurlingAppRoot(Config, appName), Config.DefaultTimeoutDuration()).Should(ContainSubstring("Hi, I'm Dora!"))
-			Eventually(helpers.CurlingAppRoot(Config, secondHost), Config.DefaultTimeoutDuration()).Should(ContainSubstring("Hi, I'm Dora!"))
+			Eventually(cf.Cf("map-route", appName, Config.GetAppsDomain(), "-n", secondHost)).Should(Exit(0))
+			Eventually(helpers.CurlingAppRoot(Config, appName)).Should(ContainSubstring("Catnip?"))
+			Eventually(helpers.CurlingAppRoot(Config, secondHost)).Should(ContainSubstring("Catnip?"))
 
 			By("removing a route")
-			Eventually(cf.Cf("unmap-route", appName, Config.GetAppsDomain(), "-n", secondHost), Config.DefaultTimeoutDuration()).Should(Exit(0))
-			Eventually(helpers.CurlingAppRoot(Config, secondHost), Config.DefaultTimeoutDuration()).ShouldNot(ContainSubstring("Hi, I'm Dora!"))
-			Eventually(helpers.CurlingAppRoot(Config, appName), Config.DefaultTimeoutDuration()).Should(ContainSubstring("Hi, I'm Dora!"))
+			Eventually(cf.Cf("unmap-route", appName, Config.GetAppsDomain(), "-n", secondHost)).Should(Exit(0))
+			Eventually(helpers.CurlingAppRoot(Config, secondHost)).ShouldNot(ContainSubstring("Catnip?"))
+			Eventually(helpers.CurlingAppRoot(Config, appName)).Should(ContainSubstring("Catnip?"))
 
 			By("deleting the original route")
-			Expect(cf.Cf("delete-route", Config.GetAppsDomain(), "-n", appName, "-f").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-			Eventually(helpers.CurlingAppRoot(Config, appName), Config.DefaultTimeoutDuration()).Should(ContainSubstring(expectedNullResponse))
+			Expect(cf.Cf("delete-route", Config.GetAppsDomain(), "-n", appName, "-f").Wait()).To(Exit(0))
+			Eventually(helpers.CurlingAppRoot(Config, appName)).Should(ContainSubstring(expectedNullResponse))
 		})
 	})
 })

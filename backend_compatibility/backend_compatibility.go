@@ -26,22 +26,22 @@ var _ = BackendCompatibilityDescribe("Backend Compatibility", func() {
 		appName = random_name.CATSRandomName("APP")
 		Eventually(cf.Cf(
 			"push", appName,
-			"-p", assets.NewAssets().Dora,
 			"--no-start",
+			"-b", Config.GetBinaryBuildpackName(),
 			"-m", DEFAULT_MEMORY_LIMIT,
-			"-b", Config.GetRubyBuildpackName(),
+			"-p", assets.NewAssets().Catnip,
 			"-d", Config.GetAppsDomain()),
 			Config.CfPushTimeoutDuration()).Should(Exit(0))
 	})
 
 	AfterEach(func() {
-		app_helpers.AppReport(appName, Config.DefaultTimeoutDuration())
-		Eventually(cf.Cf("delete", appName, "-f"), Config.DefaultTimeoutDuration()).Should(Exit(0))
+		app_helpers.AppReport(appName)
+		Eventually(cf.Cf("delete", appName, "-f")).Should(Exit(0))
 	})
 
 	Describe("An app staged on the DEA", func() {
 		BeforeEach(func() {
-			guid := cf.Cf("app", appName, "--guid").Wait(Config.DefaultTimeoutDuration()).Out.Contents()
+			guid := cf.Cf("app", appName, "--guid").Wait().Out.Contents()
 			appGuid := strings.TrimSpace(string(guid))
 
 			By("Uploading a droplet staged on the DEA")
@@ -50,8 +50,8 @@ var _ = BackendCompatibilityDescribe("Backend Compatibility", func() {
 			token := v3_helpers.GetAuthToken()
 			uploadUrl := fmt.Sprintf("%s%s/v2/apps/%s/droplet/upload", Config.Protocol(), Config.GetApiEndpoint(), appGuid)
 			bits := fmt.Sprintf(`droplet=@%s`, dropletPath)
-			curl := helpers.Curl(Config, "-v", uploadUrl, "-X", "PUT", "-F", bits, "-H", fmt.Sprintf("Authorization: %s", token)).Wait(Config.DefaultTimeoutDuration())
-			Expect(curl).To(Exit(0))
+			curl := helpers.CurlRedact(token, Config, uploadUrl, "-X", "PUT", "-F", bits, "-H", fmt.Sprintf("Authorization: %s", token)).Wait()
+			Expect(curl).To(Exit(0), string(curl.Err.Contents()))
 
 			var job struct {
 				Metadata struct {
@@ -63,15 +63,15 @@ var _ = BackendCompatibilityDescribe("Backend Compatibility", func() {
 			pollingUrl := job.Metadata.Url
 
 			Eventually(func() *Session {
-				return cf.Cf("curl", pollingUrl).Wait(Config.DefaultTimeoutDuration())
-			}, Config.DefaultTimeoutDuration()).Should(gbytes.Say("finished"))
+				return cf.Cf("curl", pollingUrl).Wait()
+			}).Should(gbytes.Say("finished"))
 		})
 
 		It("runs on Diego", func() {
 			Eventually(cf.Cf("start", appName), Config.CfPushTimeoutDuration()).Should(Exit(0))
 			Eventually(func() string {
 				return helpers.CurlAppRoot(Config, appName)
-			}, Config.DefaultTimeoutDuration()).Should(ContainSubstring("Hi, I'm Dora!"))
+			}).Should(ContainSubstring("Hi, I'm Dora!"))
 		})
 	})
 })

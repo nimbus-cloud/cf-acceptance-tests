@@ -23,17 +23,22 @@ var _ = AppsDescribe("An application being staged", func() {
 	})
 
 	AfterEach(func() {
-		app_helpers.AppReport(appName, Config.DefaultTimeoutDuration())
+		app_helpers.AppReport(appName)
 
-		cf.Cf("delete", appName, "-f", "-r").Wait(Config.DefaultTimeoutDuration())
+		cf.Cf("delete", appName, "-f", "-r").Wait()
 	})
 
 	It("has its staging log streamed during a push", func() {
-		Eventually(cf.Cf("push", appName, "--no-start", "-b", Config.GetRubyBuildpackName(), "-m", DEFAULT_MEMORY_LIMIT, "-p", assets.NewAssets().Dora, "-d", Config.GetAppsDomain()), Config.DefaultTimeoutDuration()).Should(Exit(0))
-		app_helpers.SetBackend(appName)
-		start := cf.Cf("start", appName).Wait(Config.CfPushTimeoutDuration())
+		push := cf.Cf("push",
+			appName,
+			"-b", Config.GetBinaryBuildpackName(),
+			"-m", DEFAULT_MEMORY_LIMIT,
+			"-p", assets.NewAssets().Catnip,
+			"-c", "./catnip",
+			"-d", Config.GetAppsDomain()).Wait(Config.CfPushTimeoutDuration())
+		Expect(push).To(Exit(0))
 
-		output := string(start.Buffer().Contents())
+		output := string(push.Out.Contents())
 		expected := []string{"Installing dependencies", "Uploading droplet", "App started"}
 		found := false
 		for _, value := range expected {

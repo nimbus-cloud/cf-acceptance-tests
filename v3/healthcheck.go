@@ -2,11 +2,11 @@ package v3
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/cloudfoundry-incubator/cf-test-helpers/cf"
 	"github.com/cloudfoundry-incubator/cf-test-helpers/helpers"
 	. "github.com/cloudfoundry/cf-acceptance-tests/cats_suite_helpers"
+	"github.com/cloudfoundry/cf-acceptance-tests/helpers/app_helpers"
 	"github.com/cloudfoundry/cf-acceptance-tests/helpers/assets"
 	"github.com/cloudfoundry/cf-acceptance-tests/helpers/random_name"
 	. "github.com/cloudfoundry/cf-acceptance-tests/helpers/v3_helpers"
@@ -15,7 +15,7 @@ import (
 	. "github.com/onsi/gomega/gexec"
 )
 
-var _ = AppsDescribe("Healthcheck", func() {
+var _ = V3Describe("Healthcheck", func() {
 	var (
 		appName    string
 		appGuid    string
@@ -45,7 +45,7 @@ var _ = AppsDescribe("Healthcheck", func() {
 	})
 
 	AfterEach(func() {
-		FetchRecentLogs(appGuid, token, Config)
+		app_helpers.AppReport(appName)
 		DeleteApp(appGuid)
 	})
 
@@ -54,15 +54,15 @@ var _ = AppsDescribe("Healthcheck", func() {
 			updateProcessPath := fmt.Sprintf("/v3/processes/%s", webProcess.Guid)
 			setHealthCheckBody := `{"health_check": {"type": "process"}}`
 
-			Expect(cf.Cf("curl", updateProcessPath, "-X", "PATCH", "-d", setHealthCheckBody).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+			Expect(cf.Cf("curl", updateProcessPath, "-X", "PATCH", "-d", setHealthCheckBody).Wait()).To(Exit(0))
 
 			StartApp(appGuid)
 
-			Expect(string(cf.Cf("apps").Wait(Config.DefaultTimeoutDuration()).Out.Contents())).To(MatchRegexp(fmt.Sprintf("(v3-)?(%s)*(-web)?(\\s)+(started)", webProcess.Name)))
+			Expect(string(cf.Cf("apps").Wait().Out.Contents())).To(MatchRegexp(fmt.Sprintf("(v3-)?(%s)*(-web)?(\\s)+(started)", webProcess.Name)))
 
 			Eventually(func() string {
 				return helpers.CurlAppRoot(Config, appName)
-			}, Config.DefaultTimeoutDuration(), 2*time.Second).Should(ContainSubstring("Hi, I'm Dora!"))
+			}).Should(ContainSubstring("Hi, I'm Dora!"))
 		})
 	})
 
@@ -71,15 +71,15 @@ var _ = AppsDescribe("Healthcheck", func() {
 			updateProcessPath := fmt.Sprintf("/v3/processes/%s", webProcess.Guid)
 			setHealthCheckBody := `{"health_check": {"type": "port"}}`
 
-			Expect(cf.Cf("curl", updateProcessPath, "-X", "PATCH", "-d", setHealthCheckBody).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+			Expect(cf.Cf("curl", updateProcessPath, "-X", "PATCH", "-d", setHealthCheckBody).Wait()).To(Exit(0))
 
 			StartApp(appGuid)
 
-			Expect(string(cf.Cf("apps").Wait(Config.DefaultTimeoutDuration()).Out.Contents())).To(MatchRegexp(fmt.Sprintf("(v3-)?(%s)*(-web)?(\\s)+(started)", webProcess.Name)))
+			Expect(string(cf.Cf("apps").Wait().Out.Contents())).To(MatchRegexp(fmt.Sprintf("(v3-)?(%s)*(-web)?(\\s)+(started)", webProcess.Name)))
 
 			Eventually(func() string {
 				return helpers.CurlAppRoot(Config, appName)
-			}, Config.DefaultTimeoutDuration(), 2*time.Second).Should(ContainSubstring("Hi, I'm Dora!"))
+			}).Should(ContainSubstring("Hi, I'm Dora!"))
 		})
 	})
 
@@ -88,15 +88,15 @@ var _ = AppsDescribe("Healthcheck", func() {
 			updateProcessPath := fmt.Sprintf("/v3/processes/%s", webProcess.Guid)
 			setHealthCheckBody := `{"health_check": {"type": "http", "data":{"endpoint":"/health"}}}`
 
-			Expect(cf.Cf("curl", updateProcessPath, "-X", "PATCH", "-d", setHealthCheckBody).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+			Expect(cf.Cf("curl", updateProcessPath, "-X", "PATCH", "-d", setHealthCheckBody).Wait()).To(Exit(0))
 
 			StartApp(appGuid)
 
-			Expect(string(cf.Cf("apps").Wait(Config.DefaultTimeoutDuration()).Out.Contents())).To(MatchRegexp(fmt.Sprintf("(v3-)?(%s)*(-web)?(\\s)+(started)", webProcess.Name)))
+			Expect(string(cf.Cf("apps").Wait().Out.Contents())).To(MatchRegexp(fmt.Sprintf("(v3-)?(%s)*(-web)?(\\s)+(started)", webProcess.Name)))
 
 			Eventually(func() string {
 				return helpers.CurlAppRoot(Config, appName)
-			}, Config.DefaultTimeoutDuration(), 2*time.Second).Should(ContainSubstring("Hi, I'm Dora!"))
+			}).Should(ContainSubstring("Hi, I'm Dora!"))
 		})
 	})
 })

@@ -7,6 +7,9 @@ import (
 	"os"
 	"path"
 
+	"github.com/cloudfoundry/cf-acceptance-tests/helpers/app_helpers"
+	"github.com/cloudfoundry/cf-acceptance-tests/helpers/download"
+
 	. "github.com/cloudfoundry/cf-acceptance-tests/cats_suite_helpers"
 
 	"github.com/cloudfoundry-incubator/cf-test-helpers/cf"
@@ -42,7 +45,7 @@ var _ = V3Describe("package features", func() {
 	})
 
 	AfterEach(func() {
-		FetchRecentLogs(appGuid, token, Config)
+		app_helpers.AppReport(appName)
 		DeleteApp(appGuid)
 	})
 
@@ -67,7 +70,7 @@ var _ = V3Describe("package features", func() {
 			copyUrl := fmt.Sprintf("v3/packages/?source_guid=%s", packageGuid)
 
 			session := cf.Cf("curl", copyUrl, "-X", "POST", "-d", copyRequestBody)
-			bytes := session.Wait(Config.DefaultTimeoutDuration()).Out.Contents()
+			bytes := session.Wait().Out.Contents()
 			var pac struct {
 				Guid string `json:"guid"`
 			}
@@ -81,11 +84,12 @@ var _ = V3Describe("package features", func() {
 			app_package_path := path.Join(tmpdir, destinationAppName)
 
 			// DOWNLOAD
-			session = cf.Cf("curl", fmt.Sprintf("/v3/packages/%s/download", copiedPackageGuid), "--output", app_package_path).Wait(Config.DefaultTimeoutDuration())
-			Expect(session).To(Exit(0))
+			downloadURL := fmt.Sprintf("/v3/packages/%s/download", copiedPackageGuid)
+			err = download.WithRedirect(downloadURL, app_package_path, Config)
+			Expect(err).ToNot(HaveOccurred())
 
 			session = helpers.Run("unzip", "-l", app_package_path)
-			Expect(session.Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+			Expect(session.Wait()).To(Exit(0))
 			Expect(session.Out).To(Say("dora.rb"))
 		})
 	})
@@ -101,7 +105,7 @@ var _ = V3Describe("package features", func() {
 			buildPath := fmt.Sprintf("/v3/builds/%s", buildGuid)
 
 			Eventually(func() *Session {
-				return cf.Cf("curl", buildPath).Wait(Config.DefaultTimeoutDuration())
+				return cf.Cf("curl", buildPath).Wait()
 			}, Config.CfPushTimeoutDuration()).Should(Say("STAGED"))
 		})
 	})

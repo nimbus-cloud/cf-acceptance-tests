@@ -7,6 +7,7 @@ import (
 
 	"github.com/cloudfoundry-incubator/cf-test-helpers/cf"
 	"github.com/cloudfoundry-incubator/cf-test-helpers/helpers"
+	"github.com/cloudfoundry/cf-acceptance-tests/helpers/app_helpers"
 	. "github.com/cloudfoundry/cf-acceptance-tests/helpers/app_helpers"
 	"github.com/cloudfoundry/cf-acceptance-tests/helpers/assets"
 	"github.com/cloudfoundry/cf-acceptance-tests/helpers/random_name"
@@ -39,12 +40,12 @@ var _ = V3Describe("v3 buildpack app lifecycle", func() {
 		uploadUrl = fmt.Sprintf("%s%s/v3/packages/%s/upload", Config.Protocol(), Config.GetApiEndpoint(), packageGuid)
 
 		appUrl := "https://" + appName + "." + Config.GetAppsDomain()
-		nullSession := helpers.CurlSkipSSL(Config.GetSkipSSLValidation(), appUrl).Wait(Config.DefaultTimeoutDuration())
+		nullSession := helpers.CurlSkipSSL(Config.GetSkipSSLValidation(), appUrl).Wait()
 		expectedNullResponse = string(nullSession.Buffer().Contents())
 	})
 
 	AfterEach(func() {
-		FetchRecentLogs(appGuid, token, Config)
+		app_helpers.AppReport(appName)
 		DeleteApp(appGuid)
 	})
 
@@ -59,13 +60,13 @@ var _ = V3Describe("v3 buildpack app lifecycle", func() {
 
 			buildGuid := StageBuildpackPackage(packageGuid, Config.GetRubyBuildpackName())
 
-			usageEvents := UsageEventsAfterGuid(TestSetup, lastUsageEventGuid)
+			usageEvents := UsageEventsAfterGuid(lastUsageEventGuid)
 			event := AppUsageEvent{Entity: Entity{State: "STAGING_STARTED", ParentAppGuid: appGuid, ParentAppName: appName}}
 			Expect(UsageEventsInclude(usageEvents, event)).To(BeTrue())
 
 			WaitForBuildToStage(buildGuid)
 
-			usageEvents = UsageEventsAfterGuid(TestSetup, lastUsageEventGuid)
+			usageEvents = UsageEventsAfterGuid(lastUsageEventGuid)
 			event = AppUsageEvent{Entity: Entity{State: "STAGING_STOPPED", ParentAppGuid: appGuid, ParentAppName: appName}}
 			Expect(UsageEventsInclude(usageEvents, event)).To(BeTrue())
 
@@ -94,10 +95,10 @@ var _ = V3Describe("v3 buildpack app lifecycle", func() {
 			Expect(output).To(ContainSubstring(fmt.Sprintf("application_name\\\":\\\"%s", appName)))
 			Expect(output).To(ContainSubstring(appCreationEnvironmentVariables))
 
-			Expect(string(cf.Cf("apps").Wait(Config.DefaultTimeoutDuration()).Out.Contents())).To(MatchRegexp(fmt.Sprintf("(v3-)?(%s)*(-web)?(\\s)+(started)", webProcess.Name)))
-			Expect(string(cf.Cf("apps").Wait(Config.DefaultTimeoutDuration()).Out.Contents())).To(MatchRegexp(fmt.Sprintf("(v3-)?(%s)*(-web)?(\\s)+(started)", workerProcess.Name)))
+			Expect(string(cf.Cf("apps").Wait().Out.Contents())).To(MatchRegexp(fmt.Sprintf("(v3-)?(%s)*(-web)?(\\s)+(started)", webProcess.Name)))
+			Expect(string(cf.Cf("apps").Wait().Out.Contents())).To(MatchRegexp(fmt.Sprintf("(v3-)?(%s)*(-web)?(\\s)+(started)", workerProcess.Name)))
 
-			usageEvents = UsageEventsAfterGuid(TestSetup, lastUsageEventGuid)
+			usageEvents = UsageEventsAfterGuid(lastUsageEventGuid)
 
 			event1 := AppUsageEvent{Entity: Entity{ProcessType: webProcess.Type, AppGuid: webProcess.Guid, State: "STARTED", ParentAppGuid: appGuid, ParentAppName: appName}}
 			event2 := AppUsageEvent{Entity: Entity{ProcessType: workerProcess.Type, AppGuid: workerProcess.Guid, State: "STARTED", ParentAppGuid: appGuid, ParentAppName: appName}}
@@ -106,10 +107,10 @@ var _ = V3Describe("v3 buildpack app lifecycle", func() {
 
 			StopApp(appGuid)
 
-			Expect(string(cf.Cf("apps").Wait(Config.DefaultTimeoutDuration()).Out.Contents())).To(MatchRegexp(fmt.Sprintf("(v3-)?(%s)*(-web)?(\\s)+(stopped)", webProcess.Name)))
-			Expect(string(cf.Cf("apps").Wait(Config.DefaultTimeoutDuration()).Out.Contents())).To(MatchRegexp(fmt.Sprintf("(v3-)?(%s)*(-web)?(\\s)+(stopped)", workerProcess.Name)))
+			Expect(string(cf.Cf("apps").Wait().Out.Contents())).To(MatchRegexp(fmt.Sprintf("(v3-)?(%s)*(-web)?(\\s)+(stopped)", webProcess.Name)))
+			Expect(string(cf.Cf("apps").Wait().Out.Contents())).To(MatchRegexp(fmt.Sprintf("(v3-)?(%s)*(-web)?(\\s)+(stopped)", workerProcess.Name)))
 
-			usageEvents = UsageEventsAfterGuid(TestSetup, lastUsageEventGuid)
+			usageEvents = UsageEventsAfterGuid(lastUsageEventGuid)
 			event1 = AppUsageEvent{Entity: Entity{ProcessType: webProcess.Type, AppGuid: webProcess.Guid, State: "STOPPED", ParentAppGuid: appGuid, ParentAppName: appName}}
 			event2 = AppUsageEvent{Entity: Entity{ProcessType: workerProcess.Type, AppGuid: workerProcess.Guid, State: "STOPPED", ParentAppGuid: appGuid, ParentAppName: appName}}
 			Expect(UsageEventsInclude(usageEvents, event1)).To(BeTrue())
@@ -117,7 +118,7 @@ var _ = V3Describe("v3 buildpack app lifecycle", func() {
 
 			Eventually(func() string {
 				return helpers.CurlAppRoot(Config, webProcess.Name)
-			}, Config.DefaultTimeoutDuration()).Should(ContainSubstring(expectedNullResponse))
+			}).Should(ContainSubstring(expectedNullResponse))
 		})
 	})
 
@@ -145,28 +146,30 @@ var _ = V3Describe("v3 buildpack app lifecycle", func() {
 			lastUsageEventGuid := LastAppUsageEventGuid(TestSetup)
 			StartApp(appGuid)
 
+			// Because v3 start returns immediately, the curl returning "ok" is the signal that Push has finished
+			// So we're using the Push timeout here
 			Eventually(func() string {
 				return helpers.CurlAppRoot(Config, webProcess.Name)
-			}, Config.DefaultTimeoutDuration()).Should(ContainSubstring("ok"))
+			}, Config.CfPushTimeoutDuration()).Should(ContainSubstring("ok"))
 
-			Expect(string(cf.Cf("apps").Wait(Config.DefaultTimeoutDuration()).Out.Contents())).To(MatchRegexp(fmt.Sprintf("(v3-)?(%s)*(-web)?(\\s)+(started)", webProcess.Name)))
+			Expect(string(cf.Cf("apps").Wait().Out.Contents())).To(MatchRegexp(fmt.Sprintf("(v3-)?(%s)*(-web)?(\\s)+(started)", webProcess.Name)))
 
-			usageEvents := UsageEventsAfterGuid(TestSetup, lastUsageEventGuid)
+			usageEvents := UsageEventsAfterGuid(lastUsageEventGuid)
 
 			event1 := AppUsageEvent{Entity: Entity{ProcessType: webProcess.Type, AppGuid: webProcess.Guid, State: "STARTED", ParentAppGuid: appGuid, ParentAppName: appName}}
 			Expect(UsageEventsInclude(usageEvents, event1)).To(BeTrue())
 
 			StopApp(appGuid)
 
-			Expect(string(cf.Cf("apps").Wait(Config.DefaultTimeoutDuration()).Out.Contents())).To(MatchRegexp(fmt.Sprintf("(v3-)?(%s)*(-web)?(\\s)+(stopped)", webProcess.Name)))
+			Expect(string(cf.Cf("apps").Wait().Out.Contents())).To(MatchRegexp(fmt.Sprintf("(v3-)?(%s)*(-web)?(\\s)+(stopped)", webProcess.Name)))
 
-			usageEvents = UsageEventsAfterGuid(TestSetup, lastUsageEventGuid)
+			usageEvents = UsageEventsAfterGuid(lastUsageEventGuid)
 			event1 = AppUsageEvent{Entity: Entity{ProcessType: webProcess.Type, AppGuid: webProcess.Guid, State: "STOPPED", ParentAppGuid: appGuid, ParentAppName: appName}}
 			Expect(UsageEventsInclude(usageEvents, event1)).To(BeTrue())
 
 			Eventually(func() string {
 				return helpers.CurlAppRoot(Config, webProcess.Name)
-			}, Config.DefaultTimeoutDuration()).Should(ContainSubstring(expectedNullResponse))
+			}).Should(ContainSubstring(expectedNullResponse))
 		})
 	})
 })
@@ -178,7 +181,6 @@ var _ = V3Describe("v3 docker app lifecycle", func() {
 		packageGuid                     string
 		spaceGuid                       string
 		appCreationEnvironmentVariables string
-		token                           string
 		expectedNullResponse            string
 	)
 
@@ -190,16 +192,15 @@ var _ = V3Describe("v3 docker app lifecycle", func() {
 		spaceGuid = GetSpaceGuidFromName(TestSetup.RegularUserContext().Space)
 		appCreationEnvironmentVariables = `"foo":"bar"`
 		appGuid = CreateDockerApp(appName, spaceGuid, `{"foo":"bar"}`)
-		packageGuid = CreateDockerPackage(appGuid, "cloudfoundry/diego-docker-app:latest")
-		token = GetAuthToken()
+		packageGuid = CreateDockerPackage(appGuid, Config.GetPublicDockerAppImage())
 
 		appUrl := "https://" + appName + "." + Config.GetAppsDomain()
-		nullSession := helpers.CurlSkipSSL(Config.GetSkipSSLValidation(), appUrl).Wait(Config.DefaultTimeoutDuration())
+		nullSession := helpers.CurlSkipSSL(Config.GetSkipSSLValidation(), appUrl).Wait()
 		expectedNullResponse = string(nullSession.Buffer().Contents())
 	})
 
 	AfterEach(func() {
-		FetchRecentLogs(appGuid, token, Config)
+		app_helpers.AppReport(appName)
 		DeleteApp(appGuid)
 	})
 
@@ -222,28 +223,28 @@ var _ = V3Describe("v3 docker app lifecycle", func() {
 
 		Eventually(func() string {
 			return helpers.CurlAppRoot(Config, webProcess.Name)
-		}, Config.DefaultTimeoutDuration()).Should(Equal("0"))
+		}).Should(Equal("0"))
 
 		output := helpers.CurlApp(Config, webProcess.Name, "/env")
 		Expect(output).To(ContainSubstring(fmt.Sprintf("application_name\\\":\\\"%s", appName)))
 		Expect(output).To(ContainSubstring(appCreationEnvironmentVariables))
 
-		Expect(string(cf.Cf("apps").Wait(Config.DefaultTimeoutDuration()).Out.Contents())).To(MatchRegexp(fmt.Sprintf("(v3-)?(%s)*(-web)?(\\s)+(started)", webProcess.Name)))
-		usageEvents := UsageEventsAfterGuid(TestSetup, lastUsageEventGuid)
+		Expect(string(cf.Cf("apps").Wait().Out.Contents())).To(MatchRegexp(fmt.Sprintf("(v3-)?(%s)*(-web)?(\\s)+(started)", webProcess.Name)))
+		usageEvents := UsageEventsAfterGuid(lastUsageEventGuid)
 
 		event := AppUsageEvent{Entity: Entity{ProcessType: webProcess.Type, AppGuid: webProcess.Guid, State: "STARTED", ParentAppGuid: appGuid, ParentAppName: appName}}
 		Expect(UsageEventsInclude(usageEvents, event)).To(BeTrue())
 
 		StopApp(appGuid)
 
-		Expect(string(cf.Cf("apps").Wait(Config.DefaultTimeoutDuration()).Out.Contents())).To(MatchRegexp(fmt.Sprintf("(v3-)?(%s)*(-web)?(\\s)+(stopped)", webProcess.Name)))
+		Expect(string(cf.Cf("apps").Wait().Out.Contents())).To(MatchRegexp(fmt.Sprintf("(v3-)?(%s)*(-web)?(\\s)+(stopped)", webProcess.Name)))
 
-		usageEvents = UsageEventsAfterGuid(TestSetup, lastUsageEventGuid)
+		usageEvents = UsageEventsAfterGuid(lastUsageEventGuid)
 		event = AppUsageEvent{Entity: Entity{ProcessType: webProcess.Type, AppGuid: webProcess.Guid, State: "STOPPED", ParentAppGuid: appGuid, ParentAppName: appName}}
 		Expect(UsageEventsInclude(usageEvents, event)).To(BeTrue())
 
 		Eventually(func() string {
 			return helpers.CurlAppRoot(Config, webProcess.Name)
-		}, Config.DefaultTimeoutDuration()).Should(ContainSubstring(expectedNullResponse))
+		}).Should(ContainSubstring(expectedNullResponse))
 	})
 })

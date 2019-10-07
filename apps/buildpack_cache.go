@@ -91,7 +91,7 @@ config_vars:
   PATH: bin:/usr/local/bin:/usr/bin:/bin
   FROM_BUILD_PACK: "yes"
 default_process_types:
-  web: while true; do { echo -e 'HTTP/1.1 200 OK\r\n'; echo "custom buildpack contents - $content"; } | nc -l \$PORT; done
+  web: while true; do { echo -e 'HTTP/1.1 200 OK\r\n'; echo "custom buildpack contents - $content"; } | nc -q 1 -l \$PORT; done
 EOF
 `,
 				},
@@ -103,7 +103,7 @@ EOF
 			_, err = os.Create(path.Join(appPath, "some-file"))
 			Expect(err).ToNot(HaveOccurred())
 
-			createBuildpack := cf.Cf("create-buildpack", BuildpackName, buildpackArchivePath, "0").Wait(Config.DefaultTimeoutDuration())
+			createBuildpack := cf.Cf("create-buildpack", BuildpackName, buildpackArchivePath, "0").Wait()
 			Expect(createBuildpack).Should(Exit(0))
 			Expect(createBuildpack).Should(Say("Creating"))
 			Expect(createBuildpack).Should(Say("OK"))
@@ -113,31 +113,26 @@ EOF
 	})
 
 	AfterEach(func() {
-		app_helpers.AppReport(appName, Config.DefaultTimeoutDuration())
+		app_helpers.AppReport(appName)
 
-		Expect(cf.Cf("delete", appName, "-f", "-r").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+		Expect(cf.Cf("delete", appName, "-f", "-r").Wait()).To(Exit(0))
 
 		workflowhelpers.AsUser(TestSetup.AdminUserContext(), Config.DefaultTimeoutDuration(), func() {
-			Expect(cf.Cf("delete-buildpack", BuildpackName, "-f").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+			Expect(cf.Cf("delete-buildpack", BuildpackName, "-f").Wait()).To(Exit(0))
 		})
 	})
 
 	It("uses the buildpack cache after first staging", func() {
 		Expect(cf.Cf("push", appName,
-			"--no-start",
 			"-b", BuildpackName,
 			"-m", DEFAULT_MEMORY_LIMIT,
 			"-p", appPath,
 			"-d", Config.GetAppsDomain(),
-		).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-		app_helpers.SetBackend(appName)
-
-		start := cf.Cf("start", appName).Wait(Config.CfPushTimeoutDuration())
-		Expect(start).To(Exit(0))
+		).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 
 		Eventually(func() string {
 			return helpers.CurlAppRoot(Config, appName)
-		}, Config.DefaultTimeoutDuration()).Should(ContainSubstring("custom buildpack contents - cache not found"))
+		}).Should(ContainSubstring("custom buildpack contents - cache not found"))
 
 		time.Sleep(Config.SleepTimeoutDuration())
 
@@ -146,6 +141,6 @@ EOF
 
 		Eventually(func() string {
 			return helpers.CurlAppRoot(Config, appName)
-		}, Config.DefaultTimeoutDuration()).Should(ContainSubstring("custom buildpack contents - here's a cache"))
+		}).Should(ContainSubstring("custom buildpack contents - here's a cache"))
 	})
 })

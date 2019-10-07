@@ -12,7 +12,6 @@ import (
 	"github.com/cloudfoundry/cf-acceptance-tests/helpers/app_helpers"
 	"github.com/cloudfoundry/cf-acceptance-tests/helpers/assets"
 	"github.com/cloudfoundry/cf-acceptance-tests/helpers/random_name"
-	"github.com/cloudfoundry/cf-acceptance-tests/helpers/skip_messages"
 )
 
 var _ = AppsDescribe("Crashing", func() {
@@ -23,37 +22,27 @@ var _ = AppsDescribe("Crashing", func() {
 	})
 
 	AfterEach(func() {
-		app_helpers.AppReport(appName, Config.DefaultTimeoutDuration())
-		Expect(cf.Cf("delete", appName, "-f", "-r").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+		app_helpers.AppReport(appName)
+		Expect(cf.Cf("delete", appName, "-f", "-r").Wait()).To(Exit(0))
 	})
 
 	Describe("a continuously crashing app", func() {
-		BeforeEach(func() {
-			if Config.GetBackend() != "diego" {
-				Skip(skip_messages.SkipDiegoMessage)
-			}
-		})
-
 		It("emits crash events and reports as 'crashed' after enough crashes", func() {
 			Expect(cf.Cf(
 				"push",
 				appName,
 				"-c", "/bin/false",
-				"--no-start",
-				"-b", Config.GetRubyBuildpackName(),
+				"-b", Config.GetBinaryBuildpackName(),
 				"-m", DEFAULT_MEMORY_LIMIT,
-				"-p", assets.NewAssets().Dora,
+				"-p", assets.NewAssets().Catnip,
 				"-d", Config.GetAppsDomain(),
-			).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
-
-			app_helpers.SetBackend(appName)
-			Expect(cf.Cf("start", appName).Wait(Config.CfPushTimeoutDuration())).To(Exit(1))
+			).Wait(Config.CfPushTimeoutDuration())).To(Exit(1))
 
 			Eventually(func() string {
-				return string(cf.Cf("events", appName).Wait(Config.DefaultTimeoutDuration()).Out.Contents())
-			}, Config.DefaultTimeoutDuration()).Should(MatchRegexp("[eE]xited"))
+				return string(cf.Cf("events", appName).Wait().Out.Contents())
+			}).Should(MatchRegexp("app.crash"))
 
-			Eventually(cf.Cf("app", appName), Config.DefaultTimeoutDuration()).Should(Say("crashed"))
+			Eventually(cf.Cf("app", appName)).Should(Say("crashed"))
 		})
 	})
 
@@ -62,23 +51,20 @@ var _ = AppsDescribe("Crashing", func() {
 			Expect(cf.Cf(
 				"push",
 				appName,
-				"--no-start",
-				"-b", Config.GetRubyBuildpackName(),
+				"-b", Config.GetBinaryBuildpackName(),
 				"-m", DEFAULT_MEMORY_LIMIT,
-				"-p", assets.NewAssets().Dora,
+				"-p", assets.NewAssets().Catnip,
+				"-c", "./catnip",
 				"-d", Config.GetAppsDomain(),
-			).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-
-			app_helpers.SetBackend(appName)
-			Expect(cf.Cf("start", appName).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
+			).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 		})
 
 		It("shows crash events", func() {
 			helpers.CurlApp(Config, appName, "/sigterm/KILL")
 
 			Eventually(func() string {
-				return string(cf.Cf("events", appName).Wait(Config.DefaultTimeoutDuration()).Out.Contents())
-			}, Config.DefaultTimeoutDuration()).Should(MatchRegexp("[eE]xited"))
+				return string(cf.Cf("events", appName).Wait().Out.Contents())
+			}).Should(MatchRegexp("app.crash"))
 		})
 
 		It("recovers", func() {
@@ -87,7 +73,7 @@ var _ = AppsDescribe("Crashing", func() {
 
 			Eventually(func() string {
 				return helpers.CurlApp(Config, appName, "/id")
-			}, Config.DefaultTimeoutDuration()).Should(Not(Equal(id)))
+			}).Should(Not(Equal(id)))
 		})
 	})
 })

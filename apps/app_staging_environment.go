@@ -98,7 +98,7 @@ EOF
 			_, err = os.Create(path.Join(appPath, "some-file"))
 			Expect(err).ToNot(HaveOccurred())
 
-			createBuildpack := cf.Cf("create-buildpack", BuildpackName, buildpackArchivePath, "0").Wait(Config.DefaultTimeoutDuration())
+			createBuildpack := cf.Cf("create-buildpack", BuildpackName, buildpackArchivePath, "0").Wait()
 			Expect(createBuildpack).Should(Exit(0))
 			Expect(createBuildpack).Should(Say("Creating"))
 			Expect(createBuildpack).Should(Say("OK"))
@@ -108,29 +108,25 @@ EOF
 	})
 
 	AfterEach(func() {
-		app_helpers.AppReport(appName, Config.DefaultTimeoutDuration())
+		app_helpers.AppReport(appName)
 
-		Expect(cf.Cf("delete", appName, "-f", "-r").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+		Expect(cf.Cf("delete", appName, "-f", "-r").Wait()).To(Exit(0))
 
 		workflowhelpers.AsUser(TestSetup.AdminUserContext(), Config.DefaultTimeoutDuration(), func() {
-			Expect(cf.Cf("delete-buildpack", BuildpackName, "-f").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+			Expect(cf.Cf("delete-buildpack", BuildpackName, "-f").Wait()).To(Exit(0))
 		})
 
 		os.RemoveAll(tmpdir)
 	})
 
 	It("uses a ruby binary for staging", func() {
-		Expect(cf.Cf("push", appName,
-			"--no-start",
+		push := cf.Cf("push", appName,
 			"-b", BuildpackName,
 			"-m", DEFAULT_MEMORY_LIMIT,
 			"-p", appPath,
 			"-d", Config.GetAppsDomain(),
-		).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-		app_helpers.SetBackend(appName)
-
-		start := cf.Cf("start", appName).Wait(Config.CfPushTimeoutDuration())
-		Expect(start).To(Exit(0))
-		Expect(start).To(Say("RUBY_LOCATION=/usr/bin/ruby"))
+		).Wait(Config.CfPushTimeoutDuration())
+		Expect(push).To(Exit(0))
+		Expect(push).To(Say("RUBY_LOCATION=/usr/bin/ruby"))
 	})
 })

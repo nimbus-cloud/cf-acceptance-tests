@@ -23,25 +23,21 @@ var _ = AppsDescribe("Encoding", func() {
 			"--no-start",
 			"-b", Config.GetJavaBuildpackName(),
 			"-p", assets.NewAssets().Java,
-			"-m", "512M",
+			"-m", "1024M",
 			"-d", Config.GetAppsDomain()).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
-		app_helpers.SetBackend(appName)
-		Expect(cf.Cf("set-env", appName, "JAVA_OPTS", "-Djava.security.egd=file:///dev/urandom").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+		Expect(cf.Cf("set-env", appName, "JAVA_OPTS", "-Djava.security.egd=file:///dev/urandom").Wait()).To(Exit(0))
 		Expect(cf.Cf("start", appName).Wait(CF_JAVA_TIMEOUT)).To(Exit(0))
 	})
 
 	AfterEach(func() {
-		app_helpers.AppReport(appName, Config.DefaultTimeoutDuration())
+		app_helpers.AppReport(appName)
 
-		Expect(cf.Cf("delete", appName, "-f", "-r").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+		Expect(cf.Cf("delete", appName, "-f", "-r").Wait()).To(Exit(0))
 	})
 
 	It("Does not corrupt UTF-8 characters in filenames", func() {
-		var curlResponse string
-		Eventually(func() string {
-			curlResponse = helpers.CurlApp(Config, appName, "/omega")
-			return curlResponse
-		}, Config.DefaultTimeoutDuration()).Should(ContainSubstring("It's Ω!"))
+		curlResponse := helpers.CurlApp(Config, appName, "/omega")
+		Expect(curlResponse).Should(ContainSubstring("It's Ω!"))
 		Expect(curlResponse).To(ContainSubstring("File encoding is UTF-8"))
 	})
 })

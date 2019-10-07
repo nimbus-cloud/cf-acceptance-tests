@@ -2,47 +2,61 @@ package internal
 
 import (
 	"fmt"
-	"os/exec"
+	"os"
 	"time"
 
 	"github.com/cloudfoundry-incubator/cf-test-helpers/internal"
-	"github.com/onsi/ginkgo"
-	"github.com/onsi/ginkgo/config"
+	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gexec"
 )
 
-func CfAuth(cmdStarter internal.Starter, user string, password string) *gexec.Session {
-	reporter := &sanitizedReporter{}
-	auth, err := cmdStarter.Start(reporter, "cf", "auth", user, password)
-	if err != nil {
-		panic(err)
+const VerboseAuth = "RELINT_VERBOSE_AUTH"
+const CFAuthRetries = 2
+
+func CfAuth(cmdStarter internal.Starter, reporter internal.Reporter, user string, password string, timeout time.Duration) error {
+	args := []string{"auth", user, password}
+	if os.Getenv(VerboseAuth) == "true" {
+		args = append(args, "-v")
 	}
-	return auth
+
+	return executeAuthWithRetries(cmdStarter, reporter, args, timeout)
 }
 
-const timeFormat = "2006-01-02 15:04:05.00 (MST)"
+func CfClientAuth(cmdStarter internal.Starter, reporter internal.Reporter, client string, clientSecret string, timeout time.Duration) error {
+	args := []string{"auth", client, clientSecret, "--client-credentials"}
 
-type sanitizedReporter struct{}
+	return executeAuthWithRetries(cmdStarter, reporter, args, timeout)
+}
 
-func (r *sanitizedReporter) Report(startTime time.Time, cmd *exec.Cmd) {
-	cfCmd := cmd.Args[0]
-	authCmd := cmd.Args[1]
-	user := cmd.Args[2]
+func executeAuthWithRetries(cmdStarter internal.Starter, reporter internal.Reporter, args []string, timeout time.Duration) error {
+	var auth *gexec.Session
+	var err error
+	var failures []string
 
-	startColor := ""
-	endColor := ""
-	if !config.DefaultReporterConfig.NoColor {
-		startColor = "\x1b[32m"
-		endColor = "\x1b[0m"
+	for i := 0; i < CFAuthRetries; i++ {
+		auth, err = cmdStarter.Start(reporter, "cf", args...)
+		if err != nil {
+			return err
+		}
+
+		failures = InterceptGomegaFailures(func() {
+			auth.Wait(timeout)
+		})
+
+		if len(failures) == 0 && auth.ExitCode() == 0 {
+			return nil
+		}
+
+		time.Sleep(1 * time.Second)
 	}
-	fmt.Fprintf(
-		ginkgo.GinkgoWriter,
-		"\n%s[%s]> %s %s %s %s %s\n",
-		startColor,
-		startTime.UTC().Format(timeFormat),
-		cfCmd,
-		authCmd,
-		user,
-		"[REDACTED]",
-		endColor)
+
+	if len(failures) != 0 {
+		return fmt.Errorf("cf auth command timed out: %s", failures)
+	}
+
+	if auth.ExitCode() != 0 {
+		return fmt.Errorf("cf auth command exited with %d", auth.ExitCode())
+	}
+
+	return nil
 }

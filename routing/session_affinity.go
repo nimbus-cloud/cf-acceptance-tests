@@ -10,17 +10,15 @@ import (
 
 	. "github.com/cloudfoundry/cf-acceptance-tests/cats_suite_helpers"
 
-	. "code.cloudfoundry.org/cf-routing-test-helpers/helpers"
+	"github.com/cloudfoundry-incubator/cf-test-helpers/cf"
 	"github.com/cloudfoundry-incubator/cf-test-helpers/helpers"
+	"github.com/cloudfoundry/cf-acceptance-tests/helpers/app_helpers"
 	"github.com/cloudfoundry/cf-acceptance-tests/helpers/assets"
 	"github.com/cloudfoundry/cf-acceptance-tests/helpers/random_name"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gexec"
-)
-
-const (
-	VCAP_ID = "__VCAP_ID__"
+	. "github.com/onsi/gomega/gexec"
 )
 
 var _ = RoutingDescribe("Session Affinity", func() {
@@ -33,7 +31,12 @@ var _ = RoutingDescribe("Session Affinity", func() {
 		)
 		BeforeEach(func() {
 			appName = random_name.CATSRandomName("APP")
-			PushApp(appName, stickyAsset, Config.GetRubyBuildpackName(), Config.GetAppsDomain(), Config.CfPushTimeoutDuration(), DEFAULT_MEMORY_LIMIT)
+			Expect(cf.Cf("push",
+				appName,
+				"-b", Config.GetRubyBuildpackName(),
+				"-m", DEFAULT_MEMORY_LIMIT,
+				"-p", stickyAsset,
+				"-d", Config.GetAppsDomain()).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 
 			cookieStore, err := ioutil.TempFile("", "cats-sticky-session")
 			Expect(err).ToNot(HaveOccurred())
@@ -42,17 +45,15 @@ var _ = RoutingDescribe("Session Affinity", func() {
 		})
 
 		AfterEach(func() {
-			AppReport(appName, Config.DefaultTimeoutDuration())
-
-			DeleteApp(appName, Config.DefaultTimeoutDuration())
-
+			app_helpers.AppReport(appName)
+			Expect(cf.Cf("delete", appName, "-f", "-r").Wait()).To(Exit(0))
 			err := os.Remove(cookieStorePath)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
 		Context("when an app has multiple instances", func() {
 			BeforeEach(func() {
-				ScaleAppInstances(appName, 3, Config.DefaultTimeoutDuration())
+				Expect(cf.Cf("scale", appName, "-i", "3").Wait()).To(Exit(0))
 			})
 
 			Context("when the client sends VCAP_ID and JSESSION cookies", func() {
@@ -62,7 +63,7 @@ var _ = RoutingDescribe("Session Affinity", func() {
 					Eventually(func() string {
 						body = curlAppWithCookies(appName, "/", cookieStorePath)
 						return body
-					}, Config.DefaultTimeoutDuration()).Should(ContainSubstring(fmt.Sprintf("Hello, %s", appName)))
+					}).Should(ContainSubstring(fmt.Sprintf("Hello, %s", appName)))
 
 					index := parseInstanceIndex(body)
 
@@ -83,17 +84,22 @@ var _ = RoutingDescribe("Session Affinity", func() {
 
 		BeforeEach(func() {
 			appName = random_name.CATSRandomName("APP")
-			PushApp(appName, helloWorldAsset, Config.GetRubyBuildpackName(), Config.GetAppsDomain(), Config.CfPushTimeoutDuration(), DEFAULT_MEMORY_LIMIT)
+			Expect(cf.Cf("push",
+				appName,
+				"-b", Config.GetRubyBuildpackName(),
+				"-m", DEFAULT_MEMORY_LIMIT,
+				"-p", helloWorldAsset,
+				"-d", Config.GetAppsDomain()).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 		})
 
 		AfterEach(func() {
-			AppReport(appName, Config.DefaultTimeoutDuration())
-			DeleteApp(appName, Config.DefaultTimeoutDuration())
+			app_helpers.AppReport(appName)
+			Expect(cf.Cf("delete", appName, "-f", "-r").Wait()).To(Exit(0))
 		})
 
 		Context("when an app has multiple instances", func() {
 			BeforeEach(func() {
-				ScaleAppInstances(appName, 3, Config.CfPushTimeoutDuration())
+				Expect(cf.Cf("scale", appName, "-i", "3").Wait()).To(Exit(0))
 			})
 
 			Context("when the client does not send VCAP_ID and JSESSION cookies", func() {
@@ -103,7 +109,7 @@ var _ = RoutingDescribe("Session Affinity", func() {
 					Eventually(func() string {
 						body = helpers.CurlAppRoot(Config, appName)
 						return body
-					}, Config.DefaultTimeoutDuration()).Should(ContainSubstring(fmt.Sprintf("Hello, %s", appName)))
+					}).Should(ContainSubstring(fmt.Sprintf("Hello, %s", appName)))
 
 					indexPre := parseInstanceIndex(body)
 
@@ -111,7 +117,7 @@ var _ = RoutingDescribe("Session Affinity", func() {
 						body := helpers.CurlAppRoot(Config, appName)
 						index := parseInstanceIndex(body)
 						return index
-					}, Config.DefaultTimeoutDuration()).ShouldNot(Equal(indexPre))
+					}).ShouldNot(Equal(indexPre))
 				})
 			})
 		})
@@ -131,16 +137,26 @@ var _ = RoutingDescribe("Session Affinity", func() {
 			domain := Config.GetAppsDomain()
 
 			app1 = random_name.CATSRandomName("APP")
-			PushApp(app1, stickyAsset, Config.GetRubyBuildpackName(), Config.GetAppsDomain(), Config.CfPushTimeoutDuration(), DEFAULT_MEMORY_LIMIT)
+			Expect(cf.Cf("push",
+				app1,
+				"-b", Config.GetRubyBuildpackName(),
+				"-m", DEFAULT_MEMORY_LIMIT,
+				"-p", stickyAsset,
+				"-d", Config.GetAppsDomain()).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 			app2 = random_name.CATSRandomName("APP")
-			PushApp(app2, stickyAsset, Config.GetRubyBuildpackName(), Config.GetAppsDomain(), Config.CfPushTimeoutDuration(), DEFAULT_MEMORY_LIMIT)
+			Expect(cf.Cf("push",
+				app2,
+				"-b", Config.GetRubyBuildpackName(),
+				"-m", DEFAULT_MEMORY_LIMIT,
+				"-p", stickyAsset,
+				"-d", Config.GetAppsDomain()).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 
-			ScaleAppInstances(app1, 2, Config.DefaultTimeoutDuration())
-			ScaleAppInstances(app2, 2, Config.DefaultTimeoutDuration())
+			Expect(cf.Cf("scale", app1, "-i", "3").Wait()).To(Exit(0))
+			Expect(cf.Cf("scale", app2, "-i", "3").Wait()).To(Exit(0))
 			hostname = random_name.CATSRandomName("ROUTE")
 
-			MapRouteToApp(app1, domain, hostname, app1Path, Config.DefaultTimeoutDuration())
-			MapRouteToApp(app2, domain, hostname, app2Path, Config.DefaultTimeoutDuration())
+			Expect(cf.Cf("map-route", app1, domain, "--hostname", hostname, "--path", app1Path).Wait()).To(Exit(0))
+			Expect(cf.Cf("map-route", app2, domain, "--hostname", hostname, "--path", app2Path).Wait()).To(Exit(0))
 
 			cookieStore, err := ioutil.TempFile("", "cats-sticky-session")
 			Expect(err).ToNot(HaveOccurred())
@@ -149,10 +165,10 @@ var _ = RoutingDescribe("Session Affinity", func() {
 		})
 
 		AfterEach(func() {
-			AppReport(app1, Config.DefaultTimeoutDuration())
-			AppReport(app2, Config.DefaultTimeoutDuration())
-			DeleteApp(app1, Config.DefaultTimeoutDuration())
-			DeleteApp(app2, Config.DefaultTimeoutDuration())
+			app_helpers.AppReport(app1)
+			app_helpers.AppReport(app2)
+			Expect(cf.Cf("delete", app1, "-f", "-r").Wait()).To(Exit(0))
+			Expect(cf.Cf("delete", app2, "-f", "-r").Wait()).To(Exit(0))
 
 			err := os.Remove(cookieStorePath)
 			Expect(err).ToNot(HaveOccurred())
@@ -165,7 +181,7 @@ var _ = RoutingDescribe("Session Affinity", func() {
 			Eventually(func() string {
 				body = curlAppWithCookies(hostname, app1Path, cookieStorePath)
 				return body
-			}, Config.DefaultTimeoutDuration()).Should(ContainSubstring(fmt.Sprintf("Hello, %s", app1)))
+			}).Should(ContainSubstring(fmt.Sprintf("Hello, %s", app1)))
 
 			index1 := parseInstanceIndex(body)
 
@@ -173,19 +189,19 @@ var _ = RoutingDescribe("Session Affinity", func() {
 			Eventually(func() string {
 				body = curlAppWithCookies(hostname, app2Path, cookieStorePath)
 				return body
-			}, Config.DefaultTimeoutDuration()).Should(ContainSubstring(fmt.Sprintf("Hello, %s", app2)))
+			}).Should(ContainSubstring(fmt.Sprintf("Hello, %s", app2)))
 
 			index2 := parseInstanceIndex(body)
 
 			// Hit the APP1 again to verify that the session is stick to the right instance.
 			Eventually(func() string {
 				return curlAppWithCookies(hostname, app1Path, cookieStorePath)
-			}, Config.DefaultTimeoutDuration()).Should(ContainSubstring(fmt.Sprintf("Hello, %s at index: %d", app1, index1)))
+			}).Should(ContainSubstring(fmt.Sprintf("Hello, %s at index: %d", app1, index1)))
 
 			// Hit the APP2 again to verify that the session is stick to the right instance.
 			Eventually(func() string {
 				return curlAppWithCookies(hostname, app2Path, cookieStorePath)
-			}, Config.DefaultTimeoutDuration()).Should(ContainSubstring(fmt.Sprintf("Hello, %s at index: %d", app2, index2)))
+			}).Should(ContainSubstring(fmt.Sprintf("Hello, %s at index: %d", app2, index2)))
 		})
 	})
 
@@ -202,15 +218,25 @@ var _ = RoutingDescribe("Session Affinity", func() {
 			domain := Config.GetAppsDomain()
 
 			app1 = random_name.CATSRandomName("APP")
-			PushApp(app1, stickyAsset, Config.GetRubyBuildpackName(), Config.GetAppsDomain(), Config.CfPushTimeoutDuration(), DEFAULT_MEMORY_LIMIT)
+			Expect(cf.Cf("push",
+				app1,
+				"-b", Config.GetRubyBuildpackName(),
+				"-m", DEFAULT_MEMORY_LIMIT,
+				"-p", stickyAsset,
+				"-d", Config.GetAppsDomain()).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 			app2 = random_name.CATSRandomName("APP")
-			PushApp(app2, stickyAsset, Config.GetRubyBuildpackName(), Config.GetAppsDomain(), Config.CfPushTimeoutDuration(), DEFAULT_MEMORY_LIMIT)
+			Expect(cf.Cf("push",
+				app2,
+				"-b", Config.GetRubyBuildpackName(),
+				"-m", DEFAULT_MEMORY_LIMIT,
+				"-p", stickyAsset,
+				"-d", Config.GetAppsDomain()).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 
-			ScaleAppInstances(app1, 2, Config.DefaultTimeoutDuration())
-			ScaleAppInstances(app2, 2, Config.DefaultTimeoutDuration())
+			Expect(cf.Cf("scale", app1, "-i", "3").Wait()).To(Exit(0))
+			Expect(cf.Cf("scale", app2, "-i", "3").Wait()).To(Exit(0))
 			hostname = app1
 
-			MapRouteToApp(app2, domain, hostname, app2Path, Config.DefaultTimeoutDuration())
+			Expect(cf.Cf("map-route", app2, domain, "--hostname", hostname, "--path", app2Path).Wait()).To(Exit(0))
 
 			cookieStore, err := ioutil.TempFile("", "cats-sticky-session")
 			Expect(err).ToNot(HaveOccurred())
@@ -219,11 +245,11 @@ var _ = RoutingDescribe("Session Affinity", func() {
 		})
 
 		AfterEach(func() {
-			AppReport(app1, Config.DefaultTimeoutDuration())
-			AppReport(app2, Config.DefaultTimeoutDuration())
+			app_helpers.AppReport(app1)
+			app_helpers.AppReport(app2)
 
-			DeleteApp(app1, Config.DefaultTimeoutDuration())
-			DeleteApp(app2, Config.DefaultTimeoutDuration())
+			Expect(cf.Cf("delete", app1, "-f", "-r").Wait()).To(Exit(0))
+			Expect(cf.Cf("delete", app2, "-f", "-r").Wait()).To(Exit(0))
 
 			err := os.Remove(cookieStorePath)
 			Expect(err).ToNot(HaveOccurred())
@@ -237,7 +263,7 @@ var _ = RoutingDescribe("Session Affinity", func() {
 			Eventually(func() string {
 				body = curlAppWithCookies(hostname, "/", cookieStorePath)
 				return body
-			}, Config.DefaultTimeoutDuration()).Should(ContainSubstring(fmt.Sprintf("Hello, %s", app1)))
+			}).Should(ContainSubstring(fmt.Sprintf("Hello, %s", app1)))
 
 			index1 := parseInstanceIndex(body)
 
@@ -246,7 +272,7 @@ var _ = RoutingDescribe("Session Affinity", func() {
 			Eventually(func() string {
 				body = curlAppWithCookies(hostname, app2Path, cookieStorePath)
 				return body
-			}, Config.DefaultTimeoutDuration()).Should(ContainSubstring(fmt.Sprintf("Hello, %s", app2)))
+			}).Should(ContainSubstring(fmt.Sprintf("Hello, %s", app2)))
 
 			index2 := parseInstanceIndex(body)
 
@@ -255,14 +281,14 @@ var _ = RoutingDescribe("Session Affinity", func() {
 			// stick correctly. Only send the first session ID.
 			Eventually(func() string {
 				return curlAppWithCookies(hostname, "/", cookieStorePath)
-			}, Config.DefaultTimeoutDuration()).Should(ContainSubstring(fmt.Sprintf("Hello, %s at index: %d", app1, index1)))
+			}).Should(ContainSubstring(fmt.Sprintf("Hello, %s at index: %d", app1, index1)))
 
 			// 4. Hit the APP2 (path APP) again, to ensure that the instance ID is
 			// stick correctly. In this case, both the two cookies will be sent to
 			// the server. The curl would store them.
 			Eventually(func() string {
 				return curlAppWithCookies(hostname, app2Path, cookieStorePath)
-			}, Config.DefaultTimeoutDuration()).Should(ContainSubstring(fmt.Sprintf("Hello, %s at index: %d", app2, index2)))
+			}).Should(ContainSubstring(fmt.Sprintf("Hello, %s at index: %d", app2, index2)))
 		})
 	})
 })

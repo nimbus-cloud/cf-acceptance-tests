@@ -8,7 +8,7 @@ if [ ! -f "${CONFIG}" ]; then
 fi
 
 echo "Printing sanitized \$CONFIG"
-grep -v -e password -e private_docker_registry_ $CONFIG
+grep -v -e password -e private_docker_registry_ -e credhub_secret -e honeycomb_write_key $CONFIG
 
 bin_dir=$(dirname "${BASH_SOURCE[0]}")
 project_go_root="${bin_dir}/../../../../../"
@@ -18,13 +18,13 @@ pushd "${project_go_root}" > /dev/null
 popd > /dev/null
 
 export GOPATH="${project_gopath}"
-export PATH="${project_gopath}/bin":$PATH
 
-go install -v github.com/cloudfoundry/cf-acceptance-tests/vendor/github.com/onsi/ginkgo/ginkgo
+export RUN_ID=$(openssl rand -hex 16)
 
-go list github.com/cloudfoundry/cf-acceptance-tests/... \
-  | grep -v github.com/cloudfoundry/cf-acceptance-tests/assets \
-  | grep -v vendor \
-  | xargs -I {} go test -c {}
+export CF_PLUGIN_HOME=$HOME
 
+go build -v -o bin/ginkgo github.com/cloudfoundry/cf-acceptance-tests/vendor/github.com/onsi/ginkgo/ginkgo
+export PATH=$PWD/bin:$PATH
+
+echo "Using $(ginkgo version)" > /dev/null
 ginkgo "$@"

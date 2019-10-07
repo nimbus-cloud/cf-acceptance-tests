@@ -12,6 +12,11 @@ import (
 	. "github.com/cloudfoundry/cf-acceptance-tests/helpers/validationerrors"
 )
 
+const (
+	CredhubAssistedMode    = "assisted"
+	CredhubNonAssistedMode = "non-assisted"
+)
+
 type config struct {
 	ApiEndpoint *string `json:"api"`
 	AppsDomain  *string `json:"apps_domain"`
@@ -30,15 +35,10 @@ type config struct {
 
 	ConfigurableTestPassword *string `json:"test_password"`
 
-	PersistentAppHost      *string `json:"persistent_app_host"`
-	PersistentAppOrg       *string `json:"persistent_app_org"`
-	PersistentAppQuotaName *string `json:"persistent_app_quota_name"`
-	PersistentAppSpace     *string `json:"persistent_app_space"`
+	IsolationSegmentName   *string `json:"isolation_segment_name"`
+	IsolationSegmentDomain *string `json:"isolation_segment_domain"`
 
-	IsolationSegmentName *string `json:"isolation_segment_name"`
-
-	Backend           *string `json:"backend"`
-	SkipSSLValidation *bool   `json:"skip_ssl_validation"`
+	SkipSSLValidation *bool `json:"skip_ssl_validation"`
 
 	ArtifactsDirectory *string `json:"artifacts_directory"`
 
@@ -54,6 +54,7 @@ type config struct {
 
 	BinaryBuildpackName     *string `json:"binary_buildpack_name"`
 	GoBuildpackName         *string `json:"go_buildpack_name"`
+	HwcBuildpackName        *string `json:"hwc_buildpack_name"`
 	JavaBuildpackName       *string `json:"java_buildpack_name"`
 	NodejsBuildpackName     *string `json:"nodejs_buildpack_name"`
 	PhpBuildpackName        *string `json:"php_buildpack_name"`
@@ -61,31 +62,67 @@ type config struct {
 	RubyBuildpackName       *string `json:"ruby_buildpack_name"`
 	StaticFileBuildpackName *string `json:"staticfile_buildpack_name"`
 
-	IncludeApps                       *bool `json:"include_apps"`
-	IncludeBackendCompatiblity        *bool `json:"include_backend_compatibility"`
-	IncludeContainerNetworking        *bool `json:"include_container_networking"`
-	IncludeDetect                     *bool `json:"include_detect"`
-	IncludeDocker                     *bool `json:"include_docker"`
-	IncludeInternetDependent          *bool `json:"include_internet_dependent"`
-	IncludePersistentApp              *bool `json:"include_persistent_app"`
-	IncludePrivateDockerRegistry      *bool `json:"include_private_docker_registry"`
-	IncludePrivilegedContainerSupport *bool `json:"include_privileged_container_support"`
-	IncludeRouteServices              *bool `json:"include_route_services"`
-	IncludeRouting                    *bool `json:"include_routing"`
-	IncludeSSO                        *bool `json:"include_sso"`
-	IncludeSecurityGroups             *bool `json:"include_security_groups"`
-	IncludeServices                   *bool `json:"include_services"`
-	IncludeSsh                        *bool `json:"include_ssh"`
-	IncludeTasks                      *bool `json:"include_tasks"`
-	IncludeV3                         *bool `json:"include_v3"`
-	IncludeZipkin                     *bool `json:"include_zipkin"`
-	IncludeIsolationSegments          *bool `json:"include_isolation_segments"`
+	VolumeServiceName         *string `json:"volume_service_name"`
+	VolumeServicePlanName     *string `json:"volume_service_plan_name"`
+	VolumeServiceCreateConfig *string `json:"volume_service_create_config"`
+
+	IncludeApps                     *bool `json:"include_apps"`
+	IncludeBackendCompatiblity      *bool `json:"include_backend_compatibility"`
+	IncludeCapiNoBridge             *bool `json:"include_capi_no_bridge"`
+	IncludeContainerNetworking      *bool `json:"include_container_networking"`
+	IncludeDetect                   *bool `json:"include_detect"`
+	IncludeDocker                   *bool `json:"include_docker"`
+	IncludeInternetDependent        *bool `json:"include_internet_dependent"`
+	IncludeInternetless             *bool `json:"include_internetless"`
+	IncludePrivateDockerRegistry    *bool `json:"include_private_docker_registry"`
+	IncludeRouteServices            *bool `json:"include_route_services"`
+	IncludeRouting                  *bool `json:"include_routing"`
+	IncludeSSO                      *bool `json:"include_sso"`
+	IncludeSecurityGroups           *bool `json:"include_security_groups"`
+	IncludeServices                 *bool `json:"include_services"`
+	IncludeServiceDiscovery         *bool `json:"include_service_discovery"`
+	IncludeServiceInstanceSharing   *bool `json:"include_service_instance_sharing"`
+	IncludeSsh                      *bool `json:"include_ssh"`
+	IncludeTasks                    *bool `json:"include_tasks"`
+	IncludeTCPRouting               *bool `json:"include_tcp_routing"`
+	IncludeV3                       *bool `json:"include_v3"`
+	IncludeDeployments              *bool `json:"include_deployments"`
+	IncludeZipkin                   *bool `json:"include_zipkin"`
+	IncludeIsolationSegments        *bool `json:"include_isolation_segments"`
+	IncludeRoutingIsolationSegments *bool `json:"include_routing_isolation_segments"`
+	IncludeVolumeServices           *bool `json:"include_volume_services"`
+
+	UseLogCache *bool `json:"use_log_cache"`
+
+	CredhubMode         *string `json:"credhub_mode"`
+	CredhubLocation     *string `json:"credhub_location"`
+	CredhubClientName   *string `json:"credhub_client"`
+	CredhubClientSecret *string `json:"credhub_secret"`
+
+	Stacks *[]string `json:"stacks,omitempty"`
+
+	IncludeWindows        *bool   `json:"include_windows"`
+	UseWindowsTestTask    *bool   `json:"use_windows_test_task"`
+	UseWindowsContextPath *bool   `json:"use_windows_context_path"`
+	WindowsStack          *string `json:"windows_stack"`
 
 	PrivateDockerRegistryImage    *string `json:"private_docker_registry_image"`
 	PrivateDockerRegistryUsername *string `json:"private_docker_registry_username"`
 	PrivateDockerRegistryPassword *string `json:"private_docker_registry_password"`
+	PublicDockerAppImage          *string `json:"public_docker_app_image"`
+
+	UnallocatedIPForSecurityGroup *string `json:"unallocated_ip_for_security_group"`
+	RequireProxiedAppTraffic      *bool   `json:"require_proxied_app_traffic"`
 
 	NamePrefix *string `json:"name_prefix"`
+
+	ReporterConfig *reporterConfig `json:"reporter_config"`
+}
+
+type reporterConfig struct {
+	HoneyCombWriteKey string                 `json:"honeycomb_write_key"`
+	HoneyCombDataset  string                 `json:"honeycomb_dataset"`
+	CustomTags        map[string]interface{} `json:"custom_tags"`
 }
 
 var defaults = config{}
@@ -107,17 +144,12 @@ func ptrToFloat(f float64) *float64 {
 }
 
 func getDefaults() config {
-	defaults.Backend = ptrToString("")
-	defaults.PersistentAppHost = ptrToString("CATS-persistent-app")
-
-	defaults.PersistentAppOrg = ptrToString("CATS-persistent-org")
-	defaults.PersistentAppQuotaName = ptrToString("CATS-persistent-quota")
-	defaults.PersistentAppSpace = ptrToString("CATS-persistent-space")
-
 	defaults.IsolationSegmentName = ptrToString("")
+	defaults.IsolationSegmentDomain = ptrToString("")
 
 	defaults.BinaryBuildpackName = ptrToString("binary_buildpack")
 	defaults.GoBuildpackName = ptrToString("go_buildpack")
+	defaults.HwcBuildpackName = ptrToString("hwc_buildpack")
 	defaults.JavaBuildpackName = ptrToString("java_buildpack")
 	defaults.NodejsBuildpackName = ptrToString("nodejs_buildpack")
 	defaults.PhpBuildpackName = ptrToString("php_buildpack")
@@ -127,24 +159,47 @@ func getDefaults() config {
 
 	defaults.IncludeApps = ptrToBool(true)
 	defaults.IncludeDetect = ptrToBool(true)
-	defaults.IncludePersistentApp = ptrToBool(true)
 	defaults.IncludeRouting = ptrToBool(true)
+	defaults.IncludeV3 = ptrToBool(true)
+	defaults.IncludeDeployments = ptrToBool(false)
 
 	defaults.IncludeBackendCompatiblity = ptrToBool(false)
+	defaults.IncludeCapiNoBridge = ptrToBool(true)
 	defaults.IncludeContainerNetworking = ptrToBool(false)
+	defaults.CredhubMode = ptrToString("")
+	defaults.CredhubLocation = ptrToString("https://credhub.service.cf.internal:8844")
+	defaults.CredhubClientName = ptrToString("credhub_admin_client")
+	defaults.CredhubClientSecret = ptrToString("")
 	defaults.IncludeDocker = ptrToBool(false)
 	defaults.IncludeInternetDependent = ptrToBool(false)
+	defaults.IncludeInternetless = ptrToBool(false)
 	defaults.IncludeIsolationSegments = ptrToBool(false)
-	defaults.IncludePrivilegedContainerSupport = ptrToBool(false)
+	defaults.IncludeRoutingIsolationSegments = ptrToBool(false)
 	defaults.IncludePrivateDockerRegistry = ptrToBool(false)
 	defaults.IncludeRouteServices = ptrToBool(false)
 	defaults.IncludeSSO = ptrToBool(false)
 	defaults.IncludeSecurityGroups = ptrToBool(false)
+	defaults.IncludeServiceDiscovery = ptrToBool(false)
 	defaults.IncludeServices = ptrToBool(false)
 	defaults.IncludeSsh = ptrToBool(false)
 	defaults.IncludeTasks = ptrToBool(false)
-	defaults.IncludeV3 = ptrToBool(false)
 	defaults.IncludeZipkin = ptrToBool(false)
+	defaults.IncludeServiceInstanceSharing = ptrToBool(false)
+	defaults.IncludeTCPRouting = ptrToBool(false)
+	defaults.IncludeVolumeServices = ptrToBool(false)
+
+	defaults.UseLogCache = ptrToBool(true)
+
+	defaults.IncludeWindows = ptrToBool(false)
+	defaults.UseWindowsContextPath = ptrToBool(false)
+	defaults.WindowsStack = ptrToString("windows2012R2")
+	defaults.UseWindowsTestTask = ptrToBool(false)
+
+	defaults.VolumeServiceName = ptrToString("")
+	defaults.VolumeServicePlanName = ptrToString("")
+	defaults.VolumeServiceCreateConfig = ptrToString("")
+
+	defaults.ReporterConfig = &reporterConfig{}
 
 	defaults.UseHttp = ptrToBool(false)
 	defaults.UseExistingUser = ptrToBool(false)
@@ -153,12 +208,12 @@ func getDefaults() config {
 	defaults.UseExistingOrganization = ptrToBool(false)
 	defaults.ExistingOrganization = ptrToString("")
 
-	defaults.AsyncServiceOperationTimeout = ptrToInt(2)
-	defaults.BrokerStartTimeout = ptrToInt(5)
-	defaults.CfPushTimeout = ptrToInt(2)
+	defaults.AsyncServiceOperationTimeout = ptrToInt(120)
+	defaults.BrokerStartTimeout = ptrToInt(300)
+	defaults.CfPushTimeout = ptrToInt(120)
 	defaults.DefaultTimeout = ptrToInt(30)
-	defaults.DetectTimeout = ptrToInt(5)
-	defaults.LongCurlTimeout = ptrToInt(2)
+	defaults.DetectTimeout = ptrToInt(300)
+	defaults.LongCurlTimeout = ptrToInt(120)
 	defaults.SleepTimeout = ptrToInt(30)
 
 	defaults.ConfigurableTestPassword = ptrToString("")
@@ -170,8 +225,14 @@ func getDefaults() config {
 	defaults.PrivateDockerRegistryImage = ptrToString("")
 	defaults.PrivateDockerRegistryUsername = ptrToString("")
 	defaults.PrivateDockerRegistryPassword = ptrToString("")
+	defaults.PublicDockerAppImage = ptrToString("cloudfoundry/diego-docker-app-custom:latest")
+
+	defaults.UnallocatedIPForSecurityGroup = ptrToString("10.0.244.255")
+	defaults.RequireProxiedAppTraffic = ptrToBool(false)
 
 	defaults.NamePrefix = ptrToString("CATS")
+
+	defaults.Stacks = &[]string{"cflinuxfs3"}
 	return defaults
 }
 
@@ -209,7 +270,7 @@ func validateConfig(config *config) Errors {
 		errs.Add(err)
 	}
 
-	err = validateBackend(config)
+	err = validatePublicDockerAppImage(config)
 	if err != nil {
 		errs.Add(err)
 	}
@@ -220,6 +281,31 @@ func validateConfig(config *config) Errors {
 	}
 
 	err = validateIsolationSegments(config)
+	if err != nil {
+		errs.Add(err)
+	}
+
+	err = validateRoutingIsolationSegments(config)
+	if err != nil {
+		errs.Add(err)
+	}
+
+	err = validateCredHubSettings(config)
+	if err != nil {
+		errs.Add(err)
+	}
+
+	err = validateWindows(config)
+	if err != nil {
+		errs.Add(err)
+	}
+
+	err = validateStacks(config)
+	if err != nil {
+		errs.Add(err)
+	}
+
+	err = validateVolumeServices(config)
 	if err != nil {
 		errs.Add(err)
 	}
@@ -236,20 +322,11 @@ func validateConfig(config *config) Errors {
 	if config.ConfigurableTestPassword == nil {
 		errs.Add(fmt.Errorf("* 'test_password' must not be null"))
 	}
-	if config.PersistentAppHost == nil {
-		errs.Add(fmt.Errorf("* 'persistent_app_host' must not be null"))
-	}
-	if config.PersistentAppOrg == nil {
-		errs.Add(fmt.Errorf("* 'persistent_app_org' must not be null"))
-	}
-	if config.PersistentAppQuotaName == nil {
-		errs.Add(fmt.Errorf("* 'persistent_app_quota_name' must not be null"))
-	}
-	if config.PersistentAppSpace == nil {
-		errs.Add(fmt.Errorf("* 'persistent_app_space' must not be null"))
-	}
 	if config.IsolationSegmentName == nil {
 		errs.Add(fmt.Errorf("* 'isolation_segment_name' must not be null"))
+	}
+	if config.IsolationSegmentDomain == nil {
+		errs.Add(fmt.Errorf("* 'isolation_segment_domain' must not be null"))
 	}
 	if config.SkipSSLValidation == nil {
 		errs.Add(fmt.Errorf("* 'skip_ssl_validation' must not be null"))
@@ -287,6 +364,9 @@ func validateConfig(config *config) Errors {
 	if config.GoBuildpackName == nil {
 		errs.Add(fmt.Errorf("* 'go_buildpack_name' must not be null"))
 	}
+	if config.HwcBuildpackName == nil {
+		errs.Add(fmt.Errorf("* 'hwc_buildpack_name' must not be null"))
+	}
 	if config.JavaBuildpackName == nil {
 		errs.Add(fmt.Errorf("* 'java_buildpack_name' must not be null"))
 	}
@@ -311,6 +391,11 @@ func validateConfig(config *config) Errors {
 	if config.IncludeBackendCompatiblity == nil {
 		errs.Add(fmt.Errorf("* 'include_backend_compatibility' must not be null"))
 	}
+
+	if config.IncludeCapiNoBridge == nil {
+		errs.Add(fmt.Errorf("* 'include_capi_no_bridge' must not be null"))
+	}
+
 	if config.IncludeContainerNetworking == nil {
 		errs.Add(fmt.Errorf("* 'include_container_networking' must not be null"))
 	}
@@ -323,14 +408,11 @@ func validateConfig(config *config) Errors {
 	if config.IncludeInternetDependent == nil {
 		errs.Add(fmt.Errorf("* 'include_internet_dependent' must not be null"))
 	}
+	if config.IncludeInternetless == nil {
+		errs.Add(fmt.Errorf("* 'include_internetless' must not be null"))
+	}
 	if config.IncludePrivateDockerRegistry == nil {
 		errs.Add(fmt.Errorf("* 'include_private_docker_registry' must not be null"))
-	}
-	if config.IncludePersistentApp == nil {
-		errs.Add(fmt.Errorf("* 'include_persistent_app' must not be null"))
-	}
-	if config.IncludePrivilegedContainerSupport == nil {
-		errs.Add(fmt.Errorf("* 'include_privileged_container_support' must not be null"))
 	}
 	if config.IncludeRouteServices == nil {
 		errs.Add(fmt.Errorf("* 'include_route_services' must not be null"))
@@ -344,14 +426,23 @@ func validateConfig(config *config) Errors {
 	if config.IncludeSecurityGroups == nil {
 		errs.Add(fmt.Errorf("* 'include_security_groups' must not be null"))
 	}
+	if config.IncludeServiceDiscovery == nil {
+		errs.Add(fmt.Errorf("* 'include_service_discovery' must not be null"))
+	}
 	if config.IncludeServices == nil {
 		errs.Add(fmt.Errorf("* 'include_services' must not be null"))
+	}
+	if config.IncludeServiceInstanceSharing == nil {
+		errs.Add(fmt.Errorf("* 'include_service_instance_sharing' must not be null"))
 	}
 	if config.IncludeSsh == nil {
 		errs.Add(fmt.Errorf("* 'include_ssh' must not be null"))
 	}
 	if config.IncludeTasks == nil {
 		errs.Add(fmt.Errorf("* 'include_tasks' must not be null"))
+	}
+	if config.IncludeTCPRouting == nil {
+		errs.Add(fmt.Errorf("* 'include_tcp_routing' must not be null"))
 	}
 	if config.IncludeV3 == nil {
 		errs.Add(fmt.Errorf("* 'include_v3' must not be null"))
@@ -376,18 +467,6 @@ func validateConfig(config *config) Errors {
 	}
 
 	return errs
-}
-
-func validateBackend(config *config) error {
-	if config.Backend == nil {
-		return fmt.Errorf("* 'backend' must not be null")
-	}
-
-	if config.GetBackend() != "dea" && config.GetBackend() != "diego" && config.GetBackend() != "" {
-		return fmt.Errorf("* Invalid configuration: 'backend' must be 'diego', 'dea', or empty but was set to '%s'", config.GetBackend())
-	}
-
-	return nil
 }
 
 func validateApiEndpoint(config *config) error {
@@ -465,6 +544,16 @@ func validateAdminPassword(config *config) error {
 	return nil
 }
 
+func validatePublicDockerAppImage(config *config) error {
+	if config.PublicDockerAppImage == nil {
+		return fmt.Errorf("* 'public_docker_app_image' must not be null")
+	}
+	if config.GetPublicDockerAppImage() == "" {
+		return fmt.Errorf("* Invalid configuration: 'public_docker_app_image' must be set to a valid image source")
+	}
+	return nil
+}
+
 func validatePrivateDockerRegistry(config *config) error {
 	if config.IncludePrivateDockerRegistry == nil {
 		return fmt.Errorf("* 'include_private_docker_registry' must not be null")
@@ -514,6 +603,91 @@ func validateIsolationSegments(config *config) error {
 	return nil
 }
 
+func validateRoutingIsolationSegments(config *config) error {
+	if config.IncludeRoutingIsolationSegments == nil {
+		return fmt.Errorf("* 'include_routing_isolation_segments' must not be null")
+	}
+	if config.IsolationSegmentName == nil {
+		return fmt.Errorf("* 'isolation_segment_name' must not be null")
+	}
+	if config.IsolationSegmentDomain == nil {
+		return fmt.Errorf("* 'isolation_segment_domain' must not be null")
+	}
+
+	if !config.GetIncludeRoutingIsolationSegments() {
+		return nil
+	}
+
+	if config.GetIsolationSegmentName() == "" {
+		return fmt.Errorf("* Invalid configuration: 'isolation_segment_name' must be provided if 'include_routing_isolation_segments' is true")
+	}
+	if config.GetIsolationSegmentDomain() == "" {
+		return fmt.Errorf("* Invalid configuration: 'isolation_segment_domain' must be provided if 'include_routing_isolation_segments' is true")
+	}
+	return nil
+}
+
+func validateCredHubSettings(config *config) error {
+	if config.CredhubMode == nil {
+		return fmt.Errorf("* 'credhub_mode' must not be null")
+	}
+
+	if config.GetIncludeCredhubAssisted() || config.GetIncludeCredhubNonAssisted() {
+		if config.GetCredHubBrokerClientSecret() == "" || config.GetCredHubBrokerClientSecret() == "" {
+			return fmt.Errorf("* 'credhub_client' and 'credhub_secret' must not be null")
+		}
+	}
+
+	return nil
+}
+
+func validateVolumeServices(config *config) error {
+	if !config.GetIncludeVolumeServices() {
+		return nil
+	}
+
+	if config.GetVolumeServiceName() == "" {
+		return fmt.Errorf("* Invalid configuration: 'volume_service_name' must be provided if 'include_volume_services' is true")
+	}
+	if config.GetVolumeServicePlanName() == "" {
+		return fmt.Errorf("* Invalid configuration: 'volume_service_plan_name' must be provided if 'include_volume_services' is true")
+	}
+
+	return nil
+}
+
+func validateWindows(config *config) error {
+	if config.IncludeWindows == nil {
+		return fmt.Errorf("* 'include_windows' must not be null")
+	}
+
+	if !config.GetIncludeWindows() {
+		return nil
+	}
+
+	switch config.GetWindowsStack() {
+	case "windows2012R2", "windows":
+	default:
+		return fmt.Errorf("* Invalid configuration: unknown Windows stack %s", config.GetWindowsStack())
+	}
+
+	return nil
+}
+
+func validateStacks(config *config) error {
+	if config.Stacks == nil {
+		return fmt.Errorf("* 'stacks' must not be null")
+	}
+
+	for _, stack := range config.GetStacks() {
+		if stack != "cflinuxfs3" {
+			return fmt.Errorf("* Invalid configuration: unknown stack '%s'. Only 'cflinuxfs3' is supported for the 'stacks' property", stack)
+		}
+	}
+
+	return nil
+}
+
 func load(path string, config *config) Errors {
 	errs := Errors{}
 	err := loadConfigFromPath(path, config)
@@ -553,12 +727,8 @@ func (c *config) DefaultTimeoutDuration() time.Duration {
 	return c.GetScaledTimeout(time.Duration(*c.DefaultTimeout) * time.Second)
 }
 
-func (c *config) LongTimeoutDuration() time.Duration {
-	return c.GetScaledTimeout(time.Duration(*c.DefaultTimeout) * time.Second)
-}
-
 func (c *config) LongCurlTimeoutDuration() time.Duration {
-	return c.GetScaledTimeout(time.Duration(*c.LongCurlTimeout) * time.Minute)
+	return c.GetScaledTimeout(time.Duration(*c.LongCurlTimeout) * time.Second)
 }
 
 func (c *config) SleepTimeoutDuration() time.Duration {
@@ -566,19 +736,19 @@ func (c *config) SleepTimeoutDuration() time.Duration {
 }
 
 func (c *config) DetectTimeoutDuration() time.Duration {
-	return c.GetScaledTimeout(time.Duration(*c.DetectTimeout) * time.Minute)
+	return c.GetScaledTimeout(time.Duration(*c.DetectTimeout) * time.Second)
 }
 
 func (c *config) CfPushTimeoutDuration() time.Duration {
-	return c.GetScaledTimeout(time.Duration(*c.CfPushTimeout) * time.Minute)
+	return c.GetScaledTimeout(time.Duration(*c.CfPushTimeout) * time.Second)
 }
 
 func (c *config) BrokerStartTimeoutDuration() time.Duration {
-	return c.GetScaledTimeout(time.Duration(*c.BrokerStartTimeout) * time.Minute)
+	return c.GetScaledTimeout(time.Duration(*c.BrokerStartTimeout) * time.Second)
 }
 
 func (c *config) AsyncServiceOperationTimeoutDuration() time.Duration {
-	return c.GetScaledTimeout(time.Duration(*c.AsyncServiceOperationTimeout) * time.Minute)
+	return c.GetScaledTimeout(time.Duration(*c.AsyncServiceOperationTimeout) * time.Second)
 }
 
 func (c *config) Protocol() string {
@@ -601,18 +771,12 @@ func (c *config) GetArtifactsDirectory() string {
 	return *c.ArtifactsDirectory
 }
 
-func (c *config) GetPersistentAppSpace() string {
-	return *c.PersistentAppSpace
-}
-func (c *config) GetPersistentAppOrg() string {
-	return *c.PersistentAppOrg
-}
-func (c *config) GetPersistentAppQuotaName() string {
-	return *c.PersistentAppQuotaName
-}
-
 func (c *config) GetIsolationSegmentName() string {
 	return *c.IsolationSegmentName
+}
+
+func (c *config) GetIsolationSegmentDomain() string {
+	return *c.IsolationSegmentDomain
 }
 
 func (c *config) GetNamePrefix() string {
@@ -625,6 +789,14 @@ func (c *config) GetExistingOrganization() string {
 
 func (c *config) GetUseExistingOrganization() bool {
 	return *c.UseExistingOrganization
+}
+
+func (c *config) GetExistingSpace() string {
+	return ""
+}
+
+func (c *config) GetUseExistingSpace() bool {
+	return false
 }
 
 func (c *config) GetUseExistingUser() bool {
@@ -647,6 +819,10 @@ func (c *config) GetShouldKeepUser() bool {
 	return *c.ShouldKeepUser
 }
 
+func (c *config) GetAddExistingUserToExistingSpace() bool {
+	return false
+}
+
 func (c *config) GetAdminUser() string {
 	return *c.AdminUser
 }
@@ -665,10 +841,6 @@ func (c *config) GetIncludeSsh() bool {
 
 func (c *config) GetIncludeApps() bool {
 	return *c.IncludeApps
-}
-
-func (c *config) GetIncludePersistentApp() bool {
-	return *c.IncludePersistentApp
 }
 
 func (c *config) GetIncludeBackendCompatiblity() bool {
@@ -691,6 +863,10 @@ func (c *config) GetIncludeInternetDependent() bool {
 	return *c.IncludeInternetDependent
 }
 
+func (c *config) GetIncludeInternetless() bool {
+	return *c.IncludeInternetless
+}
+
 func (c *config) GetIncludeRouteServices() bool {
 	return *c.IncludeRouteServices
 }
@@ -711,10 +887,6 @@ func (c *config) GetIncludePrivateDockerRegistry() bool {
 	return *c.IncludePrivateDockerRegistry
 }
 
-func (c *config) GetIncludePrivilegedContainerSupport() bool {
-	return *c.IncludePrivilegedContainerSupport
-}
-
 func (c *config) GetIncludeSecurityGroups() bool {
 	return *c.IncludeSecurityGroups
 }
@@ -727,12 +899,68 @@ func (c *config) GetIncludeSSO() bool {
 	return *c.IncludeSSO
 }
 
+func (c *config) GetIncludeTCPRouting() bool {
+	return *c.IncludeTCPRouting
+}
+
 func (c *config) GetIncludeV3() bool {
 	return *c.IncludeV3
 }
 
+func (c *config) GetIncludeDeployments() bool {
+	return *c.IncludeDeployments
+}
+
 func (c *config) GetIncludeIsolationSegments() bool {
 	return *c.IncludeIsolationSegments
+}
+
+func (c *config) GetIncludeRoutingIsolationSegments() bool {
+	return *c.IncludeRoutingIsolationSegments
+}
+
+func (c *config) GetIncludeCapiNoBridge() bool {
+	return *c.IncludeCapiNoBridge
+}
+
+func (c *config) GetIncludeCredhubAssisted() bool {
+	return *c.CredhubMode == CredhubAssistedMode
+}
+
+func (c *config) GetIncludeCredhubNonAssisted() bool {
+	return *c.CredhubMode == CredhubNonAssistedMode
+}
+
+func (c *config) GetCredHubBrokerClientCredential() string {
+	return *c.CredhubClientName
+}
+
+func (c *config) GetCredHubBrokerClientSecret() string {
+	return *c.CredhubClientSecret
+}
+
+func (c *config) GetCredHubLocation() string {
+	return *c.CredhubLocation
+}
+
+func (c *config) GetIncludeServiceInstanceSharing() bool {
+	return *c.IncludeServiceInstanceSharing
+}
+
+func (c *config) GetIncludeWindows() bool {
+	return *c.IncludeWindows
+}
+
+func (c *config) GetIncludeServiceDiscovery() bool {
+	return *c.IncludeServiceDiscovery
+}
+
+func (c *config) GetIncludeVolumeServices() bool {
+	return *c.IncludeVolumeServices
+}
+
+func (c *config) GetUseLogCache() bool {
+	return *c.UseLogCache
 }
 
 func (c *config) GetRubyBuildpackName() string {
@@ -741,6 +969,10 @@ func (c *config) GetRubyBuildpackName() string {
 
 func (c *config) GetGoBuildpackName() string {
 	return *c.GoBuildpackName
+}
+
+func (c *config) GetHwcBuildpackName() string {
+	return *c.HwcBuildpackName
 }
 
 func (c *config) GetJavaBuildpackName() string {
@@ -755,12 +987,8 @@ func (c *config) GetBinaryBuildpackName() string {
 	return *c.BinaryBuildpackName
 }
 
-func (c *config) GetPersistentAppHost() string {
-	return *c.PersistentAppHost
-}
-
-func (c *config) GetBackend() string {
-	return *c.Backend
+func (c *config) GetStaticFileBuildpackName() string {
+	return *c.StaticFileBuildpackName
 }
 
 func (c *config) GetPrivateDockerRegistryImage() string {
@@ -773,4 +1001,70 @@ func (c *config) GetPrivateDockerRegistryUsername() string {
 
 func (c *config) GetPrivateDockerRegistryPassword() string {
 	return *c.PrivateDockerRegistryPassword
+}
+
+func (c *config) GetPublicDockerAppImage() string {
+	return *c.PublicDockerAppImage
+}
+
+func (c *config) GetUnallocatedIPForSecurityGroup() string {
+	return *c.UnallocatedIPForSecurityGroup
+}
+
+func (c *config) GetRequireProxiedAppTraffic() bool {
+	return *c.RequireProxiedAppTraffic
+}
+
+func (c *config) GetStacks() []string {
+	return *c.Stacks
+}
+
+func (c *config) GetUseWindowsTestTask() bool {
+	return *c.UseWindowsTestTask
+}
+
+func (c *config) GetUseWindowsContextPath() bool {
+	return *c.UseWindowsContextPath
+}
+
+func (c *config) GetWindowsStack() string {
+	return *c.WindowsStack
+}
+
+func (c *config) GetVolumeServiceName() string {
+	return *c.VolumeServiceName
+}
+
+func (c *config) GetVolumeServicePlanName() string {
+	return *c.VolumeServicePlanName
+}
+
+func (c *config) GetVolumeServiceCreateConfig() string {
+	return *c.VolumeServiceCreateConfig
+}
+
+func (c *config) GetAdminClient() string {
+	return ""
+}
+
+func (c *config) GetAdminClientSecret() string {
+	return ""
+}
+
+func (c *config) GetExistingClient() string {
+	return ""
+}
+
+func (c *config) GetExistingClientSecret() string {
+	return ""
+}
+
+func (c *config) GetReporterConfig() reporterConfig {
+	reporterConfigFromConfig := c.ReporterConfig
+
+	if reporterConfigFromConfig != nil {
+		return *reporterConfigFromConfig
+	}
+
+	return reporterConfig{}
 }

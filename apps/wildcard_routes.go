@@ -15,7 +15,7 @@ import (
 )
 
 var _ = AppsDescribe("Wildcard Routes", func() {
-	var appNameDora string
+	var appNameCatnip string
 	var appNameSimple string
 	var domainName string
 	var orgName string
@@ -23,7 +23,7 @@ var _ = AppsDescribe("Wildcard Routes", func() {
 
 	curlRoute := func(hostName string, path string) string {
 		uri := Config.Protocol() + hostName + "." + domainName + path
-		curlCmd := helpers.CurlSkipSSL(true, uri).Wait(Config.DefaultTimeoutDuration())
+		curlCmd := helpers.CurlSkipSSL(true, uri).Wait()
 		Expect(curlCmd).To(Exit(0))
 
 		Expect(string(curlCmd.Err.Contents())).To(HaveLen(0))
@@ -39,45 +39,38 @@ var _ = AppsDescribe("Wildcard Routes", func() {
 			Expect(cf.Cf("create-shared-domain", domainName).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 		})
 
-		appNameDora = random_name.CATSRandomName("APP")
+		appNameCatnip = random_name.CATSRandomName("APP")
 		appNameSimple = random_name.CATSRandomName("APP")
 
 		Expect(cf.Cf(
-			"push", appNameDora,
-			"--no-start",
-			"-b", Config.GetRubyBuildpackName(),
+			"push", appNameCatnip,
+			"-b", Config.GetBinaryBuildpackName(),
 			"-m", DEFAULT_MEMORY_LIMIT,
-			"-p", assets.NewAssets().Dora,
+			"-p", assets.NewAssets().Catnip,
+			"-c", "./catnip",
 			"-d", Config.GetAppsDomain(),
 		).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 
-		app_helpers.SetBackend(appNameDora)
-		Expect(cf.Cf("start", appNameDora).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
-
 		Expect(cf.Cf(
 			"push", appNameSimple,
-			"--no-start",
 			"-b", Config.GetRubyBuildpackName(),
 			"-m", DEFAULT_MEMORY_LIMIT,
 			"-p", assets.NewAssets().HelloWorld,
 			"-d", Config.GetAppsDomain(),
 		).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
-
-		app_helpers.SetBackend(appNameSimple)
-		Expect(cf.Cf("start", appNameSimple).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 	})
 
 	AfterEach(func() {
-		app_helpers.AppReport(appNameDora, Config.DefaultTimeoutDuration())
-		app_helpers.AppReport(appNameSimple, Config.DefaultTimeoutDuration())
+		app_helpers.AppReport(appNameCatnip)
+		app_helpers.AppReport(appNameSimple)
 
 		workflowhelpers.AsUser(TestSetup.AdminUserContext(), Config.DefaultTimeoutDuration(), func() {
-			Expect(cf.Cf("target", "-o", orgName).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-			Expect(cf.Cf("delete-shared-domain", domainName, "-f").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+			Expect(cf.Cf("target", "-o", orgName).Wait()).To(Exit(0))
+			Expect(cf.Cf("delete-shared-domain", domainName, "-f").Wait()).To(Exit(0))
 		})
 
-		Expect(cf.Cf("delete", appNameDora, "-f", "-r").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-		Expect(cf.Cf("delete", appNameSimple, "-f", "-r").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+		Expect(cf.Cf("delete", appNameCatnip, "-f", "-r").Wait()).To(Exit(0))
+		Expect(cf.Cf("delete", appNameSimple, "-f", "-r").Wait()).To(Exit(0))
 	})
 
 	Describe("Adding a wildcard route to a domain", func() {
@@ -86,25 +79,25 @@ var _ = AppsDescribe("Wildcard Routes", func() {
 			regularRoute := "bar"
 
 			workflowhelpers.AsUser(TestSetup.AdminUserContext(), Config.DefaultTimeoutDuration(), func() {
-				Expect(cf.Cf("target", "-o", orgName).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-				Expect(cf.Cf("create-route", spaceName, domainName, "-n", wildCardRoute).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+				Expect(cf.Cf("target", "-o", orgName).Wait()).To(Exit(0))
+				Expect(cf.Cf("create-route", spaceName, domainName, "-n", wildCardRoute).Wait()).To(Exit(0))
 			})
-			Expect(cf.Cf("create-route", spaceName, domainName, "-n", regularRoute).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+			Expect(cf.Cf("create-route", spaceName, domainName, "-n", regularRoute).Wait()).To(Exit(0))
 
-			Expect(cf.Cf("map-route", appNameDora, domainName, "-n", wildCardRoute).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-			Expect(cf.Cf("map-route", appNameSimple, domainName, "-n", regularRoute).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+			Expect(cf.Cf("map-route", appNameCatnip, domainName, "-n", wildCardRoute).Wait()).To(Exit(0))
+			Expect(cf.Cf("map-route", appNameSimple, domainName, "-n", regularRoute).Wait()).To(Exit(0))
 
 			Eventually(func() string {
 				return curlRoute(regularRoute, "/")
-			}, Config.DefaultTimeoutDuration()).Should(ContainSubstring("Hello"))
+			}).Should(ContainSubstring("Hello"))
 
 			Eventually(func() string {
 				return curlRoute("foo", "/")
-			}, Config.DefaultTimeoutDuration()).Should(ContainSubstring("Hi, I'm Dora!"))
+			}).Should(ContainSubstring("Catnip?"))
 
 			Eventually(func() string {
 				return curlRoute("foo.baz", "/")
-			}, Config.DefaultTimeoutDuration()).Should(ContainSubstring("Hi, I'm Dora!"))
+			}).Should(ContainSubstring("Catnip?"))
 		})
 	})
 })

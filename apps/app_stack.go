@@ -14,16 +14,17 @@ import (
 	"github.com/cloudfoundry-incubator/cf-test-helpers/workflowhelpers"
 	"github.com/cloudfoundry/cf-acceptance-tests/helpers/app_helpers"
 	. "github.com/cloudfoundry/cf-acceptance-tests/helpers/random_name"
+	"github.com/cloudfoundry/cf-acceptance-tests/helpers/skip_messages"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gbytes"
 	. "github.com/onsi/gomega/gexec"
 )
 
-var _ = AppsDescribe("Specifying a specific Stack", func() {
+var _ = AppsDescribe("Specifying a specific stack", func() {
 	var (
 		appName       string
-		BuildpackName string
+		buildpackName string
 
 		appPath string
 
@@ -39,7 +40,7 @@ var _ = AppsDescribe("Specifying a specific Stack", func() {
 
 	BeforeEach(func() {
 		workflowhelpers.AsUser(TestSetup.AdminUserContext(), Config.DefaultTimeoutDuration(), func() {
-			BuildpackName = CATSRandomName("BPK")
+			buildpackName = CATSRandomName("BPK")
 			appName = CATSRandomName("APP")
 
 			var err error
@@ -87,7 +88,7 @@ config_vars:
   PATH: bin:/usr/local/bin:/usr/bin:/bin
   FROM_BUILD_PACK: "yes"
 default_process_types:
-  web: while true; do { echo -e 'HTTP/1.1 200 OK\r\n'; echo -e "\$(cat /etc/lsb-release)"; } | nc -l \$PORT; done
+  web: while true; do { echo -e 'HTTP/1.1 200 OK\r\n'; echo -e "\$(cat /etc/lsb-release)"; } | nc -q 1 -l \$PORT; done
 EOF
 `,
 				},
@@ -98,7 +99,7 @@ EOF
 			_, err = os.Create(path.Join(appPath, "some-file"))
 			Expect(err).ToNot(HaveOccurred())
 
-			createBuildpack := cf.Cf("create-buildpack", BuildpackName, buildpackArchivePath, "0").Wait(Config.DefaultTimeoutDuration())
+			createBuildpack := cf.Cf("create-buildpack", buildpackName, buildpackArchivePath, "0").Wait()
 			Expect(createBuildpack).Should(Exit(0))
 			Expect(createBuildpack).Should(Say("Creating"))
 			Expect(createBuildpack).Should(Say("OK"))
@@ -108,38 +109,47 @@ EOF
 	})
 
 	AfterEach(func() {
-		app_helpers.AppReport(appName, Config.DefaultTimeoutDuration())
+		app_helpers.AppReport(appName)
 
-		Expect(cf.Cf("delete", appName, "-f", "-r").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+		Expect(cf.Cf("delete", appName, "-f", "-r").Wait()).To(Exit(0))
 
 		workflowhelpers.AsUser(TestSetup.AdminUserContext(), Config.DefaultTimeoutDuration(), func() {
-			Expect(cf.Cf("delete-buildpack", BuildpackName, "-f").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+			Expect(cf.Cf("delete-buildpack", buildpackName, "-f").Wait()).To(Exit(0))
 		})
 
 		os.RemoveAll(tmpdir)
 	})
 
-	It("uses cflinuxfs2 for staging and running", func() {
-		stackName := "cflinuxfs2"
-		expected_lsb_release := "DISTRIB_CODENAME=trusty"
+	Context("when stack(s) are specified", func() {
+		It("uses stack(s) for staging and running", func() {
+			stacks := Config.GetStacks()
+			if len(stacks) == 0 {
+				Skip(skip_messages.SkipNoAlternateStacksMessage)
+			}
 
-		Expect(cf.Cf("push", appName,
-			"--no-start",
-			"-b", BuildpackName,
-			"-m", DEFAULT_MEMORY_LIMIT,
-			"-p", appPath,
-			"-s", stackName,
-			"-d", Config.GetAppsDomain(),
-		).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-		app_helpers.SetBackend(appName)
+			for _, stackName := range stacks {
+				By(fmt.Sprintf("testing stack: %s", stackName))
 
-		start := cf.Cf("start", appName).Wait(Config.CfPushTimeoutDuration())
-		Expect(start).To(Exit(0))
-		Expect(start).To(Say(expected_lsb_release))
-		Expect(start).To(Say(""))
+				var expectedLSBRelease string
+				switch stackName {
+				case "cflinuxfs3":
+					expectedLSBRelease = "DISTRIB_CODENAME=bionic"
+				}
 
-		Eventually(func() string {
-			return helpers.CurlAppRoot(Config, appName)
-		}, Config.DefaultTimeoutDuration()).Should(ContainSubstring(expected_lsb_release))
+				push := cf.Cf("push", appName,
+					"-b", buildpackName,
+					"-m", DEFAULT_MEMORY_LIMIT,
+					"-p", appPath,
+					"-s", stackName,
+					"-d", Config.GetAppsDomain(),
+				).Wait(Config.CfPushTimeoutDuration())
+				Expect(push).To(Exit(0))
+				Expect(push).To(Say(expectedLSBRelease))
+
+				Eventually(func() string {
+					return helpers.CurlAppRoot(Config, appName)
+				}).Should(ContainSubstring(expectedLSBRelease))
+			}
+		})
 	})
 })

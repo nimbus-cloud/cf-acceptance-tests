@@ -27,9 +27,9 @@ var _ = AppsDescribe("Changing an app's start command", func() {
 	})
 
 	AfterEach(func() {
-		app_helpers.AppReport(appName, Config.DefaultTimeoutDuration())
+		app_helpers.AppReport(appName)
 
-		Expect(cf.Cf("delete", appName, "-f", "-r").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+		Expect(cf.Cf("delete", appName, "-f", "-r").Wait()).To(Exit(0))
 	})
 
 	Context("by using the command flag", func() {
@@ -38,28 +38,25 @@ var _ = AppsDescribe("Changing an app's start command", func() {
 		BeforeEach(func() {
 
 			appUrl := "https://" + appName + "." + Config.GetAppsDomain()
-			nullSession := helpers.CurlSkipSSL(Config.GetSkipSSLValidation(), appUrl).Wait(Config.DefaultTimeoutDuration())
+			nullSession := helpers.CurlSkipSSL(Config.GetSkipSSLValidation(), appUrl).Wait()
 			expectedNullResponse = string(nullSession.Buffer().Contents())
 
 			Expect(cf.Cf(
 				"push", appName,
-				"--no-start",
-				"-b", Config.GetRubyBuildpackName(),
+				"-b", Config.GetBinaryBuildpackName(),
 				"-m", DEFAULT_MEMORY_LIMIT,
-				"-p", assets.NewAssets().Dora,
+				"-p", assets.NewAssets().Catnip,
 				"-d", Config.GetAppsDomain(),
-				"-c", "FOO=foo bundle exec rackup config.ru -p $PORT",
-			).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-			app_helpers.SetBackend(appName)
-			Expect(cf.Cf("start", appName).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
+				"-c", "FOO=foo ./catnip",
+			).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 		})
 
 		It("takes effect after a restart, not requiring a push", func() {
 			Eventually(func() string {
 				return helpers.CurlApp(Config, appName, "/env/FOO")
-			}, Config.DefaultTimeoutDuration()).Should(ContainSubstring("foo"))
+			}).Should(ContainSubstring("foo"))
 
-			guid := cf.Cf("app", appName, "--guid").Wait(Config.DefaultTimeoutDuration()).Out.Contents()
+			guid := cf.Cf("app", appName, "--guid").Wait().Out.Contents()
 			appGuid := strings.TrimSpace(string(guid))
 
 			workflowhelpers.ApiRequest(
@@ -67,20 +64,20 @@ var _ = AppsDescribe("Changing an app's start command", func() {
 				"/v2/apps/"+appGuid,
 				nil,
 				Config.DefaultTimeoutDuration(),
-				`{"command":"FOO=bar bundle exec rackup config.ru -p $PORT"}`,
+				`{"command":"FOO=bar ./catnip"}`,
 			)
 
-			Expect(cf.Cf("stop", appName).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+			Expect(cf.Cf("stop", appName).Wait()).To(Exit(0))
 
 			Eventually(func() string {
 				return helpers.CurlApp(Config, appName, "/env/FOO")
-			}, Config.DefaultTimeoutDuration()).Should(ContainSubstring(expectedNullResponse))
+			}).Should(ContainSubstring(expectedNullResponse))
 
 			Expect(cf.Cf("start", appName).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 
 			Eventually(func() string {
 				return helpers.CurlApp(Config, appName, "/env/FOO")
-			}, Config.DefaultTimeoutDuration()).Should(ContainSubstring("bar"))
+			}).Should(ContainSubstring("bar"))
 		})
 	})
 
@@ -96,14 +93,12 @@ var _ = AppsDescribe("Changing an app's start command", func() {
 		}
 
 		BeforeEach(func() {
-			Expect(cf.Cf("push", appName, "--no-start", "-b", Config.GetNodejsBuildpackName(), "-m", DEFAULT_MEMORY_LIMIT, "-p", assets.NewAssets().NodeWithProcfile, "-d", Config.GetAppsDomain()).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-			app_helpers.SetBackend(appName)
-			Expect(cf.Cf("start", appName).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
+			Expect(cf.Cf("push", appName, "-b", Config.GetNodejsBuildpackName(), "-m", DEFAULT_MEMORY_LIMIT, "-p", assets.NewAssets().NodeWithProcfile, "-d", Config.GetAppsDomain()).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 		})
 
 		It("detects the use of the start command in the 'web' process type", func() {
 			var appsResponse AppsResponse
-			cfResponse := cf.Cf("curl", fmt.Sprintf("/v2/apps?q=name:%s", appName)).Wait(Config.DefaultTimeoutDuration()).Out.Contents()
+			cfResponse := cf.Cf("curl", fmt.Sprintf("/v2/apps?q=name:%s", appName)).Wait().Out.Contents()
 			json.Unmarshal(cfResponse, &appsResponse)
 
 			Expect(appsResponse.Resources[0].Entity.DetectedStartCommand).To(Equal("node app.js"))

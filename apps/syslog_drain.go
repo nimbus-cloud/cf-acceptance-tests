@@ -10,6 +10,7 @@ import (
 	"github.com/cloudfoundry-incubator/cf-test-helpers/helpers"
 	"github.com/cloudfoundry/cf-acceptance-tests/helpers/app_helpers"
 	"github.com/cloudfoundry/cf-acceptance-tests/helpers/assets"
+	logshelper "github.com/cloudfoundry/cf-acceptance-tests/helpers/logs"
 	"github.com/cloudfoundry/cf-acceptance-tests/helpers/random_name"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -18,78 +19,128 @@ import (
 )
 
 var _ = AppsDescribe("Logging", func() {
-	var logWriterAppName string
+	var logWriterAppName1 string
+	var logWriterAppName2 string
 	var listenerAppName string
 	var logs *Session
 	var interrupt chan struct{}
-	var serviceName string
+	var serviceNames []string
 
 	Describe("Syslog drains", func() {
 		BeforeEach(func() {
 			interrupt = make(chan struct{}, 1)
-			serviceName = random_name.CATSRandomName("SVIN")
-			listenerAppName = random_name.CATSRandomName("APP")
-			logWriterAppName = random_name.CATSRandomName("APP")
+			serviceNames = []string{
+				random_name.CATSRandomName("SVIN"),
+				random_name.CATSRandomName("SVIN-INT"),
+			}
+			listenerAppName = random_name.CATSRandomName("APP-SYSLOG-LISTENER")
+			logWriterAppName1 = random_name.CATSRandomName("APP-FIRST-LOG-WRITER")
+			logWriterAppName2 = random_name.CATSRandomName("APP-SECOND-LOG-WRITER")
 
-			Eventually(cf.Cf("push", listenerAppName, "--no-start", "--health-check-type", "port", "-b", Config.GetGoBuildpackName(), "-m", DEFAULT_MEMORY_LIMIT, "-p", assets.NewAssets().SyslogDrainListener, "-d", Config.GetAppsDomain(), "-f", assets.NewAssets().SyslogDrainListener+"/manifest.yml"), Config.DefaultTimeoutDuration()).Should(Exit(0), "Failed to push app")
-			Eventually(cf.Cf("push", logWriterAppName, "--no-start", "-b", Config.GetRubyBuildpackName(), "-m", DEFAULT_MEMORY_LIMIT, "-p", assets.NewAssets().RubySimple, "-d", Config.GetAppsDomain()), Config.DefaultTimeoutDuration()).Should(Exit(0), "Failed to push app")
+			Eventually(cf.Cf(
+				"push",
+				listenerAppName,
+				"--health-check-type", "port",
+				"-b", Config.GetGoBuildpackName(),
+				"-m", DEFAULT_MEMORY_LIMIT,
+				"-p", assets.NewAssets().SyslogDrainListener,
+				"-d", Config.GetAppsDomain(),
+				"-f", assets.NewAssets().SyslogDrainListener+"/manifest.yml",
+			), Config.CfPushTimeoutDuration()).Should(Exit(0), "Failed to push app")
 
-			app_helpers.SetBackend(listenerAppName)
-			app_helpers.SetBackend(logWriterAppName)
+			Eventually(cf.Cf(
+				"push",
+				logWriterAppName1,
+				"-b", Config.GetRubyBuildpackName(),
+				"-m", DEFAULT_MEMORY_LIMIT,
+				"-p", assets.NewAssets().RubySimple,
+				"-d", Config.GetAppsDomain(),
+			), Config.CfPushTimeoutDuration()).Should(Exit(0), "Failed to push app")
 
-			Expect(cf.Cf("start", listenerAppName).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
-			Expect(cf.Cf("start", logWriterAppName).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
+			Eventually(cf.Cf(
+				"push",
+				logWriterAppName2,
+				"--no-start",
+				"-b", Config.GetRubyBuildpackName(),
+				"-m", DEFAULT_MEMORY_LIMIT,
+				"-p", assets.NewAssets().RubySimple,
+				"-d", Config.GetAppsDomain(),
+			), Config.CfPushTimeoutDuration()).Should(Exit(0), "Failed to push app")
 		})
 
 		AfterEach(func() {
 			logs.Kill()
 			close(interrupt)
 
-			app_helpers.AppReport(logWriterAppName, Config.DefaultTimeoutDuration())
-			app_helpers.AppReport(listenerAppName, Config.DefaultTimeoutDuration())
+			app_helpers.AppReport(logWriterAppName1)
+			app_helpers.AppReport(logWriterAppName2)
+			app_helpers.AppReport(listenerAppName)
 
-			Eventually(cf.Cf("delete", logWriterAppName, "-f", "-r"), Config.DefaultTimeoutDuration()).Should(Exit(0), "Failed to delete app")
-			Eventually(cf.Cf("delete", listenerAppName, "-f", "-r"), Config.DefaultTimeoutDuration()).Should(Exit(0), "Failed to delete app")
-			if serviceName != "" {
-				Eventually(cf.Cf("delete-service", serviceName, "-f"), Config.DefaultTimeoutDuration()).Should(Exit(0), "Failed to delete service")
+			Eventually(cf.Cf("delete", logWriterAppName1, "-f", "-r")).Should(Exit(0), "Failed to delete app")
+			Eventually(cf.Cf("delete", logWriterAppName2, "-f", "-r")).Should(Exit(0), "Failed to delete app")
+			Eventually(cf.Cf("delete", listenerAppName, "-f", "-r")).Should(Exit(0), "Failed to delete app")
+			for _, serviceName := range serviceNames {
+				if serviceName != "" {
+					Eventually(cf.Cf("delete-service", serviceName, "-f")).Should(Exit(0), "Failed to delete service")
+				}
 			}
 
 			Eventually(cf.Cf("delete-orphaned-routes", "-f"), Config.CfPushTimeoutDuration()).Should(Exit(0), "Failed to delete orphaned routes")
 		})
 
 		It("forwards app messages to registered syslog drains", func() {
-			syslogDrainURL := "syslog://" + getSyslogDrainAddress(listenerAppName)
+			// The syslog drains return two IP addresses: external & internal.
+			// On a vanilla environment, apps can connect through the syslog service
+			// to the external IP (Diego cell address and external port) of the drain
+			// container.
+			// On NSX-T, apps cannot connect to the external IP, but they can connect
+			// to the internal IP (container IP and port 8080).
+			for i, address := range getSyslogDrainAddresses(listenerAppName) {
+				var syslogDrainURL string
+				if Config.GetRequireProxiedAppTraffic() {
+					syslogDrainURL = "syslog-tls://" + address
+				} else {
+					syslogDrainURL = "syslog://" + address
+				}
 
-			Eventually(cf.Cf("cups", serviceName, "-l", syslogDrainURL), Config.DefaultTimeoutDuration()).Should(Exit(0), "Failed to create syslog drain service")
-			Eventually(cf.Cf("bind-service", logWriterAppName, serviceName), Config.DefaultTimeoutDuration()).Should(Exit(0), "Failed to bind service")
-			// We don't need to restage, because syslog service bindings don't change the app's environment variables
+				Eventually(cf.Cf("cups", serviceNames[i], "-l", syslogDrainURL)).Should(Exit(0), "Failed to create syslog drain service")
+				Eventually(cf.Cf("bind-service", logWriterAppName1, serviceNames[i])).Should(Exit(0), "Failed to bind service")
+				// We don't need to restage, because syslog service bindings don't change the app's environment variables
+			}
 
-			logs = cf.Cf("logs", listenerAppName)
-			randomMessage := random_name.CATSRandomName("RANDOM-MESSAGE")
-			go writeLogsUntilInterrupted(interrupt, randomMessage, logWriterAppName)
+			randomMessage1 := random_name.CATSRandomName("RANDOM-MESSAGE-A")
+			randomMessage2 := random_name.CATSRandomName("RANDOM-MESSAGE-B")
 
-			Eventually(logs, Config.DefaultTimeoutDuration()+1*time.Minute).Should(Say(randomMessage))
+			logs = logshelper.TailFollow(Config.GetUseLogCache(), listenerAppName)
+
+			// Have apps emit logs.
+			go writeLogsUntilInterrupted(interrupt, randomMessage1, logWriterAppName1)
+			go writeLogsUntilInterrupted(interrupt, randomMessage2, logWriterAppName2)
+
+			Eventually(logs, Config.DefaultTimeoutDuration()+2*time.Minute).Should(Say(randomMessage1))
+			Consistently(logs, 10).ShouldNot(Say(randomMessage2))
 		})
 	})
 })
 
-func getSyslogDrainAddress(appName string) string {
-	var address []byte
+func getSyslogDrainAddresses(appName string) []string {
+	var address, internalAddress []byte
 
-	Eventually(func() []byte {
-		re, err := regexp.Compile("ADDRESS: \\|(.*)\\|")
+	Eventually(func() [][]byte {
+		re, err := regexp.Compile("EXTERNAL ADDRESS: \\|(.*)\\|; INTERNAL ADDRESS: \\|(.*)\\|")
 		Expect(err).NotTo(HaveOccurred())
 
-		logs := cf.Cf("logs", appName, "--recent").Wait(Config.DefaultTimeoutDuration())
+		logs := logshelper.Tail(Config.GetUseLogCache(), appName).Wait()
 		matched := re.FindSubmatch(logs.Out.Contents())
-		if len(matched) < 2 {
+		if len(matched) < 3 {
 			return nil
 		}
 		address = matched[1]
-		return address
-	}, Config.DefaultTimeoutDuration()).Should(Not(BeNil()))
+		internalAddress = matched[2]
+		return [][]byte{address, internalAddress}
+	}).Should(Not(BeNil()))
 
-	return string(address)
+	return []string{string(address), string(internalAddress)}
 }
 
 func writeLogsUntilInterrupted(interrupt chan struct{}, randomMessage string, logWriterAppName string) {

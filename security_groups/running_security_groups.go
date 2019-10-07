@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
-	"time"
 
 	. "github.com/cloudfoundry/cf-acceptance-tests/cats_suite_helpers"
 
@@ -20,6 +19,7 @@ import (
 	"github.com/cloudfoundry-incubator/cf-test-helpers/workflowhelpers"
 	"github.com/cloudfoundry/cf-acceptance-tests/helpers/app_helpers"
 	"github.com/cloudfoundry/cf-acceptance-tests/helpers/assets"
+	"github.com/cloudfoundry/cf-acceptance-tests/helpers/logs"
 	"github.com/cloudfoundry/cf-acceptance-tests/helpers/random_name"
 	"github.com/cloudfoundry/cf-acceptance-tests/helpers/skip_messages"
 )
@@ -39,7 +39,7 @@ type StatsResponse map[string]struct {
 	}
 }
 
-type DoraCurlResponse struct {
+type CatnipCurlResponse struct {
 	Stdout     string
 	Stderr     string
 	ReturnCode int `json:"return_code"`
@@ -51,29 +51,29 @@ func pushApp(appName, buildpack string) {
 		"--no-start",
 		"-b", buildpack,
 		"-m", DEFAULT_MEMORY_LIMIT,
-		"-p", assets.NewAssets().Dora,
-		"-d", Config.GetAppsDomain()).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
-	app_helpers.SetBackend(appName)
+		"-p", assets.NewAssets().Catnip,
+		"-c", "./catnip",
+		"-d", Config.GetAppsDomain()).Wait()).To(Exit(0))
 }
 
 func getAppHostIpAndPort(appName string) (string, int) {
 	var appsResponse AppsResponse
-	cfResponse := cf.Cf("curl", fmt.Sprintf("/v2/apps?q=name:%s", appName)).Wait(Config.DefaultTimeoutDuration()).Out.Contents()
+	cfResponse := cf.Cf("curl", fmt.Sprintf("/v2/apps?q=name:%s", appName)).Wait().Out.Contents()
 	json.Unmarshal(cfResponse, &appsResponse)
 	serverAppUrl := appsResponse.Resources[0].Metadata.Url
 
 	var statsResponse StatsResponse
-	cfResponse = cf.Cf("curl", fmt.Sprintf("%s/stats", serverAppUrl)).Wait(Config.DefaultTimeoutDuration()).Out.Contents()
+	cfResponse = cf.Cf("curl", fmt.Sprintf("%s/stats", serverAppUrl)).Wait().Out.Contents()
 	json.Unmarshal(cfResponse, &statsResponse)
 
 	return statsResponse["0"].Stats.Host, statsResponse["0"].Stats.Port
 }
 
-func testAppConnectivity(clientAppName string, privateHost string, privatePort int) DoraCurlResponse {
-	var doraCurlResponse DoraCurlResponse
+func testAppConnectivity(clientAppName string, privateHost string, privatePort int) CatnipCurlResponse {
+	var catnipCurlResponse CatnipCurlResponse
 	curlResponse := helpers.CurlApp(Config, clientAppName, fmt.Sprintf("/curl/%s/%d", privateHost, privatePort))
-	json.Unmarshal([]byte(curlResponse), &doraCurlResponse)
-	return doraCurlResponse
+	json.Unmarshal([]byte(curlResponse), &catnipCurlResponse)
+	return catnipCurlResponse
 }
 
 func getAppContainerIpAndPort(appName string) (string, int) {
@@ -91,7 +91,7 @@ func getAppContainerIpAndPort(appName string) (string, int) {
 
 type Destination struct {
 	IP       string `json:"destination"`
-	Port     int    `json:"ports,string"`
+	Port     int    `json:"ports,string,omitempty"`
 	Protocol string `json:"protocol"`
 }
 
@@ -104,7 +104,7 @@ func createSecurityGroup(allowedDestinations ...Destination) string {
 	securityGroupName := random_name.CATSRandomName("SG")
 
 	workflowhelpers.AsUser(TestSetup.AdminUserContext(), Config.DefaultTimeoutDuration(), func() {
-		Expect(cf.Cf("create-security-group", securityGroupName, rulesPath).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+		Expect(cf.Cf("create-security-group", securityGroupName, rulesPath).Wait()).To(Exit(0))
 	})
 
 	return securityGroupName
@@ -113,20 +113,20 @@ func createSecurityGroup(allowedDestinations ...Destination) string {
 func bindSecurityGroup(securityGroupName, orgName, spaceName string) {
 	By("Applying security group")
 	workflowhelpers.AsUser(TestSetup.AdminUserContext(), Config.DefaultTimeoutDuration(), func() {
-		Expect(cf.Cf("bind-security-group", securityGroupName, orgName, spaceName).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+		Expect(cf.Cf("bind-security-group", securityGroupName, orgName, spaceName).Wait()).To(Exit(0))
 	})
 }
 
 func unbindSecurityGroup(securityGroupName, orgName, spaceName string) {
 	By("Unapplying security group")
 	workflowhelpers.AsUser(TestSetup.AdminUserContext(), Config.DefaultTimeoutDuration(), func() {
-		Expect(cf.Cf("unbind-security-group", securityGroupName, orgName, spaceName).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+		Expect(cf.Cf("unbind-security-group", securityGroupName, orgName, spaceName).Wait()).To(Exit(0))
 	})
 }
 
 func deleteSecurityGroup(securityGroupName string) {
 	workflowhelpers.AsUser(TestSetup.AdminUserContext(), Config.DefaultTimeoutDuration(), func() {
-		Expect(cf.Cf("delete-security-group", securityGroupName, "-f").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+		Expect(cf.Cf("delete-security-group", securityGroupName, "-f").Wait()).To(Exit(0))
 	})
 }
 
@@ -135,28 +135,28 @@ func createDummyBuildpack() string {
 	buildpackZip := assets.NewAssets().SecurityGroupBuildpack
 
 	workflowhelpers.AsUser(TestSetup.AdminUserContext(), Config.DefaultTimeoutDuration(), func() {
-		Expect(cf.Cf("create-buildpack", buildpack, buildpackZip, "999").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+		Expect(cf.Cf("create-buildpack", buildpack, buildpackZip, "999").Wait()).To(Exit(0))
 	})
 	return buildpack
 }
 
 func deleteBuildpack(buildpack string) {
 	workflowhelpers.AsUser(TestSetup.AdminUserContext(), Config.DefaultTimeoutDuration(), func() {
-		Expect(cf.Cf("delete-buildpack", buildpack, "-f").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+		Expect(cf.Cf("delete-buildpack", buildpack, "-f").Wait()).To(Exit(0))
 	})
 }
 
 func getStagingOutput(appName string) func() *Session {
 	return func() *Session {
-		appLogsSession := cf.Cf("logs", "--recent", appName)
-		Expect(appLogsSession.Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+		appLogsSession := logs.Tail(Config.GetUseLogCache(), appName)
+		Expect(appLogsSession.Wait()).To(Exit(0))
 		return appLogsSession
 	}
 }
 
 func pushServerApp() (serverAppName string, privateHost string, privatePort int) {
 	serverAppName = random_name.CATSRandomName("APP")
-	pushApp(serverAppName, Config.GetRubyBuildpackName())
+	pushApp(serverAppName, Config.GetBinaryBuildpackName())
 	Expect(cf.Cf("start", serverAppName).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 
 	privateHost, privatePort = getAppHostIpAndPort(serverAppName)
@@ -165,129 +165,121 @@ func pushServerApp() (serverAppName string, privateHost string, privatePort int)
 
 func pushClientApp() (clientAppName string) {
 	clientAppName = random_name.CATSRandomName("APP")
-	pushApp(clientAppName, Config.GetRubyBuildpackName())
+	pushApp(clientAppName, Config.GetBinaryBuildpackName())
 	Expect(cf.Cf("start", clientAppName).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 	return
 }
 
 func assertNetworkingPreconditions(clientAppName string, privateHost string, privatePort int) {
 	By("Asserting default running security group configuration for traffic between containers")
-	doraCurlResponse := testAppConnectivity(clientAppName, privateHost, privatePort)
-	Expect(doraCurlResponse.ReturnCode).NotTo(Equal(0), "Expected default running security groups not to allow internal communication between app containers. Configure your running security groups to not allow traffic on internal networks, or disable this test by setting 'include_security_groups' to 'false' in '"+os.Getenv("CONFIG")+"'.")
+	catnipCurlResponse := testAppConnectivity(clientAppName, privateHost, privatePort)
+	Expect(catnipCurlResponse.ReturnCode).NotTo(Equal(0), "Expected default running security groups not to allow internal communication between app containers. Configure your running security groups to not allow traffic on internal networks, or disable this test by setting 'include_security_groups' to 'false' in '"+os.Getenv("CONFIG")+"'.")
 
 	By("Asserting default running security group configuration from a running container to an external destination")
-	doraCurlResponse = testAppConnectivity(clientAppName, "www.google.com", 80)
-	Expect(doraCurlResponse.ReturnCode).To(Equal(0), "Expected default running security groups to allow external traffic from app containers. Configure your running security groups to not allow traffic on internal networks, or disable this test by setting 'include_security_groups' to 'false' in '"+os.Getenv("CONFIG")+"'.")
+	catnipCurlResponse = testAppConnectivity(clientAppName, "www.google.com", 80)
+	Expect(catnipCurlResponse.ReturnCode).To(Equal(0), "Expected default running security groups to allow external traffic from app containers. Configure your running security groups to not allow traffic on internal networks, or disable this test by setting 'include_security_groups' to 'false' in '"+os.Getenv("CONFIG")+"'.")
 }
 
 var _ = SecurityGroupsDescribe("App Instance Networking", func() {
 	var serverAppName, privateHost string
 	var privatePort int
 
-	Describe("using the cf-networking commands", func() {
-		var clientAppName, securityGroupName string
+	Describe("Using container-networking and running security-groups", func() {
+		var serverAppName, clientAppName, privateHost, orgName, spaceName, securityGroupName string
+		var privatePort int
 
 		BeforeEach(func() {
 			if !Config.GetIncludeContainerNetworking() {
 				Skip(skip_messages.SkipContainerNetworkingMessage)
 			}
 
+			orgName = TestSetup.RegularUserContext().Org
+			spaceName = TestSetup.RegularUserContext().Space
+
 			serverAppName, privateHost, privatePort = pushServerApp()
 			clientAppName = pushClientApp()
 			assertNetworkingPreconditions(clientAppName, privateHost, privatePort)
 		})
 
 		AfterEach(func() {
-			app_helpers.AppReport(serverAppName, Config.DefaultTimeoutDuration())
+			app_helpers.AppReport(serverAppName)
 			Expect(cf.Cf("delete", serverAppName, "-f", "-r").Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 
-			app_helpers.AppReport(clientAppName, Config.DefaultTimeoutDuration())
+			app_helpers.AppReport(clientAppName)
 			Expect(cf.Cf("delete", clientAppName, "-f", "-r").Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 
 			deleteSecurityGroup(securityGroupName)
 		})
 
-		It("allows ip traffic between containers after applying a policy and blocks it when the policy is removed", func() {
-			containerIp, containerPort := getAppContainerIpAndPort(serverAppName)
-			orgName := TestSetup.RegularUserContext().Org
-			spaceName := TestSetup.RegularUserContext().Space
+		It("correctly configures asgs and c2c policy independent of each other", func() {
+			By("creating a wide-open ASG")
+			dest := Destination{
+				IP:       "0.0.0.0/0", // some random IP that isn't covered by an existing Security Group rule
+				Protocol: "all",
+			}
+			securityGroupName = createSecurityGroup(dest)
+			privateAddress := Config.GetUnallocatedIPForSecurityGroup()
 
-			By("Testing that app cannot connect")
-			doraCurlResponse := testAppConnectivity(clientAppName, containerIp, containerPort)
-			Expect(doraCurlResponse.ReturnCode).NotTo(Equal(0))
+			By("binding new security group")
+			bindSecurityGroup(securityGroupName, orgName, spaceName)
+
+			Expect(cf.Cf("restart", clientAppName).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
+
+			By("Testing that client app cannot connect to the server app using the overlay")
+			containerIp, containerPort := getAppContainerIpAndPort(serverAppName)
+			catnipCurlResponse := testAppConnectivity(clientAppName, containerIp, containerPort)
+			Expect(catnipCurlResponse.ReturnCode).NotTo(Equal(0), "no policy configured but client app can talk to server app using overlay")
+
+			By("Testing that external connectivity to a private ip is not refused (but may be unreachable for other reasons)")
+			catnipCurlResponse = testAppConnectivity(clientAppName, privateAddress, 80)
+			Expect(catnipCurlResponse.Stderr).To(MatchRegexp("Connection timed out after|No route to host"), "wide-open ASG configured but app is still refused by private ip")
 
 			By("adding policy")
 			workflowhelpers.AsUser(TestSetup.AdminUserContext(), Config.DefaultTimeoutDuration(), func() {
-				Expect(cf.Cf("target", "-o", orgName, "-s", spaceName).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-				Expect(cf.Cf("allow-access", clientAppName, serverAppName, "--port", fmt.Sprintf("%d", containerPort), "--protocol", "tcp").Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
+				Expect(cf.Cf("target", "-o", orgName, "-s", spaceName).Wait()).To(Exit(0))
+				Expect(string(cf.Cf("network-policies").Wait().Out.Contents())).ToNot(ContainSubstring(serverAppName))
+				Expect(cf.Cf("add-network-policy", clientAppName, "--destination-app", serverAppName, "--port", fmt.Sprintf("%d", containerPort), "--protocol", "tcp").Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
+				Expect(string(cf.Cf("network-policies").Wait().Out.Contents())).To(ContainSubstring(serverAppName))
 			})
 
-			By("waiting for policy to be added on cell")
-			time.Sleep(10 * time.Second)
+			By("Testing that client app can connect to server app using the overlay")
+			Eventually(func() int {
+				catnipCurlResponse = testAppConnectivity(clientAppName, containerIp, containerPort)
+				return catnipCurlResponse.ReturnCode
+			}, "5s").Should(Equal(0), "policy is configured + wide-open asg but client app cannot talk to server app using overlay")
 
-			By("Testing that app can connect")
-			doraCurlResponse = testAppConnectivity(clientAppName, containerIp, containerPort)
-			Expect(doraCurlResponse.ReturnCode).To(Equal(0))
+			By("unbinding the wide-open security group")
+			unbindSecurityGroup(securityGroupName, orgName, spaceName)
+			Expect(cf.Cf("restart", clientAppName).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 
-			By("removing policy")
+			By("restarting the app")
+			Expect(cf.Cf("restart", clientAppName).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
+
+			By("Testing that client app can still connect to server app using the overlay")
+			Eventually(func() int {
+				catnipCurlResponse = testAppConnectivity(clientAppName, containerIp, containerPort)
+				return catnipCurlResponse.ReturnCode
+			}, "5s").Should(Equal(0), "policy is configured, asgs are not but client app cannot talk to server app using overlay")
+
+			By("Testing that external connectivity to a private ip is refused")
+			catnipCurlResponse = testAppConnectivity(clientAppName, privateAddress, 80)
+			Expect(catnipCurlResponse.Stderr).To(MatchRegexp("refused|No route to host|Connection timed out"))
+
+			By("deleting policy")
 			workflowhelpers.AsUser(TestSetup.AdminUserContext(), Config.DefaultTimeoutDuration(), func() {
-				Expect(cf.Cf("target", "-o", orgName, "-s", spaceName).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
-				Expect(cf.Cf("remove-access", clientAppName, serverAppName, "--port", fmt.Sprintf("%d", containerPort), "--protocol", "tcp").Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
+				Expect(cf.Cf("target", "-o", orgName, "-s", spaceName).Wait()).To(Exit(0))
+				Expect(string(cf.Cf("network-policies").Wait().Out.Contents())).To(ContainSubstring(serverAppName))
+				Expect(cf.Cf("remove-network-policy", clientAppName, "--destination-app", serverAppName, "--port", fmt.Sprintf("%d", containerPort), "--protocol", "tcp").Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
+				Expect(string(cf.Cf("network-policies").Wait().Out.Contents())).ToNot(ContainSubstring(serverAppName))
 			})
 
-			By("waiting for policy to be removed on cell")
-			time.Sleep(10 * time.Second)
-
-			By("Testing that app can no longer connect")
-			doraCurlResponse = testAppConnectivity(clientAppName, containerIp, containerPort)
-			Expect(doraCurlResponse.ReturnCode).NotTo(Equal(0))
-		})
-	})
-
-	Describe("Using running security-groups", func() {
-		var clientAppName, securityGroupName string
-
-		BeforeEach(func() {
-			serverAppName, privateHost, privatePort = pushServerApp()
-			clientAppName = pushClientApp()
-			assertNetworkingPreconditions(clientAppName, privateHost, privatePort)
+			By("Testing the client app cannot connect to the server app using the overlay")
+			Eventually(func() int {
+				catnipCurlResponse = testAppConnectivity(clientAppName, containerIp, containerPort)
+				return catnipCurlResponse.ReturnCode
+			}, "5s").ShouldNot(Equal(0), "no policy is configured but client app can talk to server app using overlay")
 		})
 
-		AfterEach(func() {
-			app_helpers.AppReport(serverAppName, Config.DefaultTimeoutDuration())
-			Expect(cf.Cf("delete", serverAppName, "-f", "-r").Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
-
-			app_helpers.AppReport(clientAppName, Config.DefaultTimeoutDuration())
-			Expect(cf.Cf("delete", clientAppName, "-f", "-r").Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
-
-			deleteSecurityGroup(securityGroupName)
-		})
-
-		It("allows ip traffic from a container to a private, non-container destination after binding a security group and refuses it after unbinding the security group", func() {
-			dest := Destination{
-				IP:       "10.0.244.255", // some random IP that isn't covered by an existing Security Group rule
-				Port:     80,
-				Protocol: "tcp",
-			}
-			securityGroupName = createSecurityGroup(dest)
-			By("binding new security group")
-			bindSecurityGroup(securityGroupName, TestSetup.RegularUserContext().Org, TestSetup.RegularUserContext().Space)
-
-			Expect(cf.Cf("restart", clientAppName).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
-
-			By("Testing that connection is not refused (but may be unreachable for other reasons)")
-			doraCurlResponse := testAppConnectivity(clientAppName, dest.IP, dest.Port)
-			const CurlExitCode_FailedToConnectToHost = 7
-			Expect(doraCurlResponse.ReturnCode).NotTo(Equal(CurlExitCode_FailedToConnectToHost))
-
-			By("unbinding security group")
-			unbindSecurityGroup(securityGroupName, TestSetup.RegularUserContext().Org, TestSetup.RegularUserContext().Space)
-			Expect(cf.Cf("restart", clientAppName).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
-
-			By("Testing the connect is refused")
-			doraCurlResponse = testAppConnectivity(clientAppName, dest.IP, dest.Port)
-			Expect(doraCurlResponse.ReturnCode).To(Equal(CurlExitCode_FailedToConnectToHost))
-		})
 	})
 
 	Describe("Using staging security groups", func() {
@@ -302,24 +294,24 @@ var _ = SecurityGroupsDescribe("App Instance Networking", func() {
 			pushApp(testAppName, buildpack)
 
 			privateUri := fmt.Sprintf("%s:%d", privateHost, privatePort)
-			Expect(cf.Cf("set-env", testAppName, "TESTURI", privateUri).Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+			Expect(cf.Cf("set-env", testAppName, "TESTURI", privateUri).Wait()).To(Exit(0))
 
 			Expect(cf.Cf("start", testAppName).Wait(Config.CfPushTimeoutDuration())).To(Exit(1))
 			Eventually(getStagingOutput(testAppName), 5).Should(Say("CURL_EXIT=[^0]"), "Expected staging security groups not to allow internal communication between app containers. Configure your staging security groups to not allow traffic on internal networks, or disable this test by setting 'include_security_groups' to 'false' in '"+os.Getenv("CONFIG")+"'.")
 		})
 
 		AfterEach(func() {
-			app_helpers.AppReport(serverAppName, Config.DefaultTimeoutDuration())
+			app_helpers.AppReport(serverAppName)
 			Expect(cf.Cf("delete", serverAppName, "-f", "-r").Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 
-			app_helpers.AppReport(testAppName, Config.DefaultTimeoutDuration())
+			app_helpers.AppReport(testAppName)
 			Expect(cf.Cf("delete", testAppName, "-f", "-r").Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 
 			deleteBuildpack(buildpack)
 		})
 
 		It("allows external and denies internal traffic during staging based on default staging security rules", func() {
-			Expect(cf.Cf("set-env", testAppName, "TESTURI", "www.google.com").Wait(Config.DefaultTimeoutDuration())).To(Exit(0))
+			Expect(cf.Cf("set-env", testAppName, "TESTURI", "www.google.com").Wait()).To(Exit(0))
 			Expect(cf.Cf("restart", testAppName).Wait(Config.CfPushTimeoutDuration())).To(Exit(1))
 			Eventually(getStagingOutput(testAppName), 5).Should(Say("CURL_EXIT=0"))
 		})

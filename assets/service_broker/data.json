@@ -28,6 +28,8 @@
               "route_forwarding"
             ],
             "max_db_per_node": 5,
+            "instances_retrievable": true,
+            "bindings_retrievable": true,
             "bindable": true,
             "metadata": {
               "provider": {
@@ -38,7 +40,8 @@
                 "blurb": "fake broker that is fake",
                 "longDescription": "A long time ago, in a galaxy far far away..."
               },
-              "displayName": "The Fake Broker"
+              "displayName": "The Fake Broker",
+              "shareable": true
             },
             "dashboard_client": {
               "id": "sso-test",

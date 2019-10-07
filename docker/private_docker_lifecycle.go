@@ -17,7 +17,6 @@ import (
 	"github.com/cloudfoundry/cf-acceptance-tests/helpers/skip_messages"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/onsi/gomega/gbytes"
 	. "github.com/onsi/gomega/gexec"
 )
 
@@ -41,10 +40,6 @@ var _ = DockerDescribe("Private Docker Registry Application Lifecycle", func() {
 	}
 
 	BeforeEach(func() {
-		if Config.GetBackend() != "diego" {
-			Skip(skip_messages.SkipDiegoMessage)
-		}
-
 		if !Config.GetIncludePrivateDockerRegistry() {
 			Skip(skip_messages.SkipPrivateDockerRegistryMessage)
 		}
@@ -53,7 +48,7 @@ var _ = DockerDescribe("Private Docker Registry Application Lifecycle", func() {
 	JustBeforeEach(func() {
 		spaceName := TestSetup.RegularUserContext().Space
 		session := cf.Cf("space", spaceName, "--guid")
-		Eventually(session, Config.DefaultTimeoutDuration()).Should(Exit(0))
+		Eventually(session).Should(Exit(0))
 		spaceGuid := string(session.Out.Contents())
 		spaceGuid = strings.TrimSpace(spaceGuid)
 		appName = random_name.CATSRandomName("APP")
@@ -78,12 +73,12 @@ var _ = DockerDescribe("Private Docker Registry Application Lifecycle", func() {
 		reporter := commandreporter.NewCommandReporter()
 		reporter.Report(time.Now(), cmd)
 
-		Eventually(cfCurlSession, Config.DefaultTimeoutDuration()).Should(Exit(0))
+		Eventually(cfCurlSession).Should(Exit(0))
 	})
 
 	AfterEach(func() {
-		app_helpers.AppReport(appName, Config.DefaultTimeoutDuration())
-		Eventually(cf.Cf("delete", appName, "-f"), Config.DefaultTimeoutDuration()).Should(Exit(0))
+		app_helpers.AppReport(appName)
+		Eventually(cf.Cf("delete", appName, "-f")).Should(Exit(0))
 	})
 
 	Context("when the correct username and password are given", func() {
@@ -94,19 +89,20 @@ var _ = DockerDescribe("Private Docker Registry Application Lifecycle", func() {
 
 		It("starts the docker app successfully", func() {
 			Eventually(cf.Cf("start", appName), Config.CfPushTimeoutDuration()).Should(Exit(0))
-			Eventually(cf.Cf("map-route", appName, Config.GetAppsDomain(), "--hostname", appName), Config.DefaultTimeoutDuration()).Should(Exit(0))
+			Eventually(cf.Cf("map-route", appName, Config.GetAppsDomain(), "--hostname", appName)).Should(Exit(0))
+
 			Eventually(func() string {
 				return helpers.CurlApp(Config, appName, "/env/INSTANCE_INDEX")
-			}, Config.DefaultTimeoutDuration()).Should(Equal("0"))
+			}).Should(Equal("0"))
 		})
 
 		It("can run a task", func() {
 			Eventually(cf.Cf("start", appName), Config.CfPushTimeoutDuration()).Should(Exit(0))
 			taskName := appName + "-task"
-			createCommand := cf.Cf("run-task", appName, "exit 0", "--name", taskName).Wait(Config.DefaultTimeoutDuration())
+			createCommand := cf.Cf("run-task", appName, "exit 0", "--name", taskName).Wait()
 			Expect(createCommand).To(Exit(0))
 			Eventually(func() string {
-				listCommand := cf.Cf("tasks", appName).Wait(Config.DefaultTimeoutDuration())
+				listCommand := cf.Cf("tasks", appName).Wait()
 				Expect(listCommand).To(Exit(0))
 				listOutput := string(listCommand.Out.Contents())
 				lines := strings.Split(listOutput, "\n")
@@ -117,20 +113,7 @@ var _ = DockerDescribe("Private Docker Registry Application Lifecycle", func() {
 				fields := strings.Fields(lines[4])
 				Expect(fields[1]).To(Equal(taskName))
 				return fields[2]
-			}, Config.DefaultTimeoutDuration(), 2*time.Second).Should(Equal("SUCCEEDED"))
-		})
-	})
-
-	Context("when the correct username and password are not given", func() {
-		BeforeEach(func() {
-			username = Config.GetPrivateDockerRegistryUsername() + "wrong"
-			password = Config.GetPrivateDockerRegistryPassword() + "wrong"
-		})
-
-		It("does not start the docker app successfully", func() {
-			session := cf.Cf("start", appName)
-			Eventually(session, Config.CfPushTimeoutDuration()).Should(Exit(1))
-			Expect(session).To(gbytes.Say("401 Unauthorized"))
+			}).Should(Equal("SUCCEEDED"))
 		})
 	})
 })
